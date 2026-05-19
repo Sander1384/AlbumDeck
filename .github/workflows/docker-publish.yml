@@ -1,4 +1,4 @@
-name: Build and Publish Docker Images
+name: Build and Publish Docker Image
 
 on:
   push:
@@ -15,15 +15,10 @@ jobs:
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        include:
-          - name: backend
-            image: ghcr.io/sander1384/albumdeck-backend
-            context: ./backend
-          - name: frontend
-            image: ghcr.io/sander1384/albumdeck-frontend
-            context: ./frontend
+    env:
+      IMAGE_NAME: ghcr.io/sander1384/albumdeck
+      LEGACY_IMAGE_BACKEND: ghcr.io/sander1384/albumdeck-backend
+      LEGACY_IMAGE_FRONTEND: ghcr.io/sander1384/albumdeck-frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,17 +37,21 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ matrix.image }}
+          images: |
+            ${{ env.IMAGE_NAME }}
+            ${{ env.LEGACY_IMAGE_BACKEND }}
+            ${{ env.LEGACY_IMAGE_FRONTEND }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=main,enable={{is_default_branch}}
             type=sha
             type=ref,event=tag
 
-      - name: Build and push ${{ matrix.name }}
+      - name: Build and push unified image
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
+          context: .
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

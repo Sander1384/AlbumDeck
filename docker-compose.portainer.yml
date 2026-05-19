@@ -1,7 +1,7 @@
 services:
-  backend:
-    image: ghcr.io/sander1384/albumdeck-backend:latest
-    container_name: albumdeck-backend
+  albumdeck:
+    image: ghcr.io/sander1384/albumdeck:latest
+    container_name: albumdeck
     restart: unless-stopped
     environment:
       NAVIDROME_URL: "https://music.example.com"
@@ -9,17 +9,8 @@ services:
       NAVIDROME_PASS: "your_pass_or_token"
       NAVIDROME_CLIENT: "albumdeck-app"
       NAVIDROME_ALLOW_INSECURE_TLS: "false"
-      APP_PORT: "8877"
+      APP_PORT: "8080"
     ports:
-      - "8877:8877"
+      - "8080:8080"
     volumes:
       - /volume1/docker/albumdeck/backend-data:/app/.data
-
-  frontend:
-    image: ghcr.io/sander1384/albumdeck-frontend:latest
-    container_name: albumdeck-frontend
-    restart: unless-stopped
-    depends_on:
-      - backend
-    ports:
-      - "8080:80"

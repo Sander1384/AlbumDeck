@@ -3,6 +3,7 @@ import axios from "axios";
 import cors from "cors";
 import express from "express";
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import { getAlbum, getAlbums, subsonicCoverUrl, subsonicStreamUrl, type NavidromeConfig } from "./navidrome.js";
 
@@ -262,6 +263,15 @@ app.put("/api/custom-disc-covers", async (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save covers" });
   }
 });
+
+const STATIC_DIR = path.resolve(process.cwd(), "public");
+const STATIC_INDEX = path.join(STATIC_DIR, "index.html");
+if (fsSync.existsSync(STATIC_INDEX)) {
+  app.use(express.static(STATIC_DIR));
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.sendFile(STATIC_INDEX);
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`Navidrome CD backend listening on :${PORT}`);

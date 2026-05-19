@@ -1,26 +1,18 @@
 services:
-  backend:
-    image: ghcr.io/sander1384/albumdeck-backend:latest
+  albumdeck:
+    image: ghcr.io/sander1384/albumdeck:latest
     build:
-      context: ./backend
-    container_name: navidrome-cd-backend
+      context: .
+      dockerfile: Dockerfile
+    container_name: albumdeck
     env_file:
       - .env
+    environment:
+      APP_PORT: "8080"
     ports:
-      - "8877:8877"
+      - "8080:8080"
     volumes:
       - backend_data:/app/.data
-    restart: unless-stopped
-
-  frontend:
-    image: ghcr.io/sander1384/albumdeck-frontend:latest
-    build:
-      context: ./frontend
-    container_name: navidrome-cd-frontend
-    depends_on:
-      - backend
-    ports:
-      - "8080:80"
     restart: unless-stopped
 
 volumes:
