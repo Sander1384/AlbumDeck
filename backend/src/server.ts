@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import axios from "axios";
 import cors from "cors";
 import express from "express";
@@ -18,7 +18,7 @@ const NAVIDROME_PASS = process.env.NAVIDROME_PASS?.trim() ?? "";
 const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "albumdeck-app";
 const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?? "false").toLowerCase() === "true";
 const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN?.trim() ?? "";
-const DISCOGS_USER_AGENT = "AlbumDeck/0.2.4 +https://github.com/Sander1384/AlbumDeck";
+const DISCOGS_USER_AGENT = "AlbumDeck/0.2.5 +https://github.com/Sander1384/AlbumDeck";
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
   throw new Error("Missing NAVIDROME_URL/NAVIDROME_USER/NAVIDROME_PASS in environment");
@@ -78,6 +78,17 @@ function cleanDiscogsImageUrl(url: string): string {
   return url.replace(/\\u002F/g, "/").replace(/&amp;/g, "&");
 }
 
+function compactDiscogsImages(images: Array<string | undefined>): string[] {
+  return Array.from(
+    new Set(
+      images
+        .filter((url): url is string => Boolean(url))
+        .map(cleanDiscogsImageUrl)
+        .filter((url) => /^https?:\/\/(?:i|img|api-img)\.discogs\.com\//i.test(url))
+    )
+  );
+}
+
 function extractDiscogsImagesFromHtml(html: string): string[] {
   const matches = new Set<string>();
   const add = (url: string) => matches.add(cleanDiscogsImageUrl(url));
@@ -103,9 +114,7 @@ async function getDiscogsImagesFromApi(kind: "release" | "master", id: string): 
   });
 
   const images = response.data.images ?? [];
-  return images
-    .flatMap((img) => [img.uri, img.resource_url, img.uri150])
-    .filter((url): url is string => Boolean(url));
+  return compactDiscogsImages(images.flatMap((img) => [img.uri, img.resource_url, img.uri150]));
 }
 
 async function getDiscogsImagesFromHtml(url: string): Promise<string[]> {
@@ -268,10 +277,10 @@ app.get("/api/discogs-images", async (req, res) => {
       images = await getDiscogsImagesFromHtml(target.toString());
     }
 
-    images = Array.from(new Set(images.map(cleanDiscogsImageUrl))).slice(0, 120);
+    images = compactDiscogsImages(images).slice(0, 120);
     res.json({ images });
   } catch (error) {
-    res.status(502).json({ error: error instanceof Error ? error.message : "Discogs image lookup failed" });
+    res.json({ images: [], warning: error instanceof Error ? error.message : "Discogs image lookup failed" });
   }
 });
 
@@ -283,12 +292,12 @@ app.get("/api/discogs-search", async (req, res) => {
       return;
     }
 
-    const results: Array<{ title: string; url: string }> = [];
+    const results: Array<{ title: string; url: string; images?: string[] }> = [];
     const seen = new Set<string>();
 
     try {
       const response = await axios.get<{
-        results?: Array<{ title?: string; uri?: string; type?: string }>;
+        results?: Array<{ title?: string; uri?: string; type?: string; cover_image?: string; thumb?: string }>;
       }>("https://api.discogs.com/database/search", {
         timeout: 20000,
         headers: discogsHeaders(),
@@ -302,7 +311,7 @@ app.get("/api/discogs-search", async (req, res) => {
         const url = rel.startsWith("http") ? rel : `https://www.discogs.com${rel}`;
         if (seen.has(url)) continue;
         seen.add(url);
-        results.push({ title, url });
+        results.push({ title, url, images: compactDiscogsImages([item.cover_image, item.thumb]) });
       }
     } catch {
       // Fall back to the public HTML page when the API is unavailable.

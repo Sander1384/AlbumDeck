@@ -13,6 +13,12 @@ export type Song = {
   duration?: number;
 };
 
+export type DiscogsResult = {
+  title: string;
+  url: string;
+  images?: string[];
+};
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 const COVER_SIZE = Number((import.meta.env.VITE_COVER_SIZE as string | undefined) ?? 1200);
 
@@ -64,12 +70,12 @@ export async function fetchDiscogsImages(url: string): Promise<string[]> {
   return data.images ?? [];
 }
 
-export async function searchDiscogs(query: string): Promise<Array<{ title: string; url: string }>> {
+export async function searchDiscogs(query: string): Promise<DiscogsResult[]> {
   const response = await fetch(`${API_BASE}/discogs-search?q=${encodeURIComponent(query)}`);
   if (!response.ok) {
     throw await responseError(response);
   }
-  const data = (await response.json()) as { results?: Array<{ title: string; url: string }> };
+  const data = (await response.json()) as { results?: DiscogsResult[] };
   return data.results ?? [];
 }
 

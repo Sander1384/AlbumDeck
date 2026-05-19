@@ -10,6 +10,7 @@ import {
   searchDiscogs,
   streamUrl,
   type Album,
+  type DiscogsResult,
   type Song
 } from "./api";
 import "./styles/player.css";
@@ -99,7 +100,7 @@ export default function App() {
   const [discogsCandidates, setDiscogsCandidates] = useState<string[]>([]);
   const [discogsLoading, setDiscogsLoading] = useState(false);
   const [discogsQuery, setDiscogsQuery] = useState("");
-  const [discogsResults, setDiscogsResults] = useState<Array<{ title: string; url: string }>>([]);
+  const [discogsResults, setDiscogsResults] = useState<DiscogsResult[]>([]);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [coversLoaded, setCoversLoaded] = useState(false);
   const [topCover, setTopCover] = useState<{ src: string; angle: number; key: string } | null>(null);
@@ -531,7 +532,9 @@ export default function App() {
     if (!source) return art;
     if (source.startsWith("data:")) return source;
     if (/^https?:\/\//i.test(source)) {
-      const isLikelyImage = /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(source) || source.includes("i.discogs.com/");
+      const host = new URL(source).hostname.toLowerCase();
+      const isDiscogsImageHost = ["i.discogs.com", "img.discogs.com", "api-img.discogs.com"].includes(host);
+      const isLikelyImage = /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(source) || isDiscogsImageHost;
       if (!isLikelyImage) return art;
       return proxyImageUrl(source);
     }
@@ -787,8 +790,12 @@ export default function App() {
                         key={r.url}
                         className="discogs-result"
                         onClick={() => {
-                          setCoverSourceInput(r.url);
-                          void lookupDiscogsImages(r.url);
+                          const resultImages = r.images ?? [];
+                          setCoverSourceInput(resultImages[0] ?? r.url);
+                          setDiscogsCandidates(resultImages);
+                          if (!resultImages.length) {
+                            void lookupDiscogsImages(r.url);
+                          }
                         }}
                       >
                         <span>{r.title}</span>
