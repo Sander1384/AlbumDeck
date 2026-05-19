@@ -643,7 +643,6 @@ export default function App() {
             ) : (
               <div className="cover-empty" aria-label="No album selected">
                 <div className="empty-brand">
-                  <img src="/albumdeck-logo.png" alt="AlbumDeck" />
                   <span>Kies een album in het menu</span>
                 </div>
               </div>
@@ -883,9 +882,6 @@ export default function App() {
       ) : null}
 
       {error ? <p className="error">{error}</p> : null}
-      <div className="brand-watermark" aria-hidden="true">
-        <img src="/albumdeck-logo.png" alt="" />
-      </div>
     </main>
   );
 }

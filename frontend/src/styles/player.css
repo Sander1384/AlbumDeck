@@ -63,6 +63,7 @@ body {
   align-items: center;
   padding: 10px 18px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .theme-light .stage {
@@ -73,11 +74,14 @@ body {
 .stage-disc {
   display: flex;
   justify-content: center;
+  align-items: center;
+  min-height: 0;
+  height: 100%;
 }
 
 .jewel-case {
   position: relative;
-  width: min(47vw, 700px);
+  width: min(47vw, calc(100vh - 244px), 700px);
   aspect-ratio: 1 / 1;
   border-radius: 0;
   padding: 0;
@@ -138,12 +142,6 @@ body {
   gap: 10px;
 }
 
-.empty-brand img {
-  width: min(260px, 70%);
-  height: auto;
-  opacity: 0.9;
-}
-
 .empty-brand span {
   font-size: 0.95rem;
 }
@@ -188,7 +186,7 @@ body {
 }
 
 .disc {
-  width: min(44vw, 700px);
+  width: min(44vw, calc(100vh - 244px), 700px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   position: relative;
@@ -652,20 +650,6 @@ body {
   font-size: 0.86rem;
 }
 
-.brand-watermark {
-  position: fixed;
-  right: 20px;
-  bottom: 18px;
-  opacity: 0.1;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.brand-watermark img {
-  width: 140px;
-  height: auto;
-}
-
 .cd-center-guides {
   position: absolute;
   inset: 0;
@@ -880,18 +864,15 @@ body {
     font-size: 0.8rem;
   }
 
-  .brand-watermark {
-    display: none;
-  }
 }
 
 @media (min-width: 1600px) {
   .jewel-case {
-    width: min(42vw, 760px);
+    width: min(42vw, calc(100vh - 244px), 760px);
   }
 
   .disc {
-    width: min(37vw, 720px);
+    width: min(37vw, calc(100vh - 244px), 720px);
   }
 
   .player-bar {
