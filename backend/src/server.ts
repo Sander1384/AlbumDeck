@@ -18,7 +18,7 @@ const NAVIDROME_PASS = process.env.NAVIDROME_PASS?.trim() ?? "";
 const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "albumdeck-app";
 const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?? "false").toLowerCase() === "true";
 const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN?.trim() ?? "";
-const DISCOGS_USER_AGENT = "AlbumDeck/0.2.5 +https://github.com/Sander1384/AlbumDeck";
+const DISCOGS_USER_AGENT = "AlbumDeck/0.2.6 +https://github.com/Sander1384/AlbumDeck";
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
   throw new Error("Missing NAVIDROME_URL/NAVIDROME_USER/NAVIDROME_PASS in environment");
@@ -66,11 +66,21 @@ function parseDiscogsPageUrl(rawUrl: string): { kind: "release" | "master"; id: 
   if (!/(^|\.)discogs\.com$/i.test(target.hostname)) return null;
 
   const parts = target.pathname.split("/").filter(Boolean);
-  const kind = parts[0];
-  const id = parts[1];
-  if ((kind === "release" || kind === "master") && id && /^\d+$/.test(id)) {
-    return { kind, id };
+  const extractId = (segment?: string) => segment?.match(/^(\d+)/)?.[1];
+
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i].toLowerCase();
+    const kind =
+      part === "release" || part === "releases" ? "release" :
+      part === "master" || part === "masters" ? "master" :
+      null;
+
+    if (!kind) continue;
+
+    const id = extractId(parts[i + 1]) ?? extractId(parts[i - 1]);
+    if (id) return { kind, id };
   }
+
   return null;
 }
 
