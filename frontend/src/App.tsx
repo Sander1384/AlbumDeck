@@ -58,6 +58,7 @@ type CustomDiscCover = {
 
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
+const THEME_STORAGE_KEY = "albumdeck-theme-v1";
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -110,6 +111,14 @@ export default function App() {
       return raw === null ? true : raw === "true";
     } catch {
       return true;
+    }
+  });
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    try {
+      const raw = localStorage.getItem(THEME_STORAGE_KEY);
+      return raw === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
     }
   });
 
@@ -189,6 +198,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(LOAD_SOUNDS_STORAGE_KEY, String(loadSoundsEnabled));
   }, [loadSoundsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   const stopFadeTimer = () => {
     if (fadeTimerRef.current !== null) {
@@ -589,7 +602,7 @@ export default function App() {
   };
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell theme-${theme}`}>
       <audio
         ref={audioRef}
         onTimeUpdate={(e) => setElapsed((e.target as HTMLAudioElement).currentTime)}
@@ -629,7 +642,10 @@ export default function App() {
               </div>
             ) : (
               <div className="cover-empty" aria-label="No album selected">
-                Kies een album in het menu
+                <div className="empty-brand">
+                  <img src="/albumdeck-logo.png" alt="AlbumDeck" />
+                  <span>Kies een album in het menu</span>
+                </div>
               </div>
             )}
           </div>
@@ -668,6 +684,14 @@ export default function App() {
               title={loadSoundsEnabled ? "Laadgeluiden aan" : "Laadgeluiden uit"}
             >
               <Icon name={loadSoundsEnabled ? "sound" : "soundOff"} />
+            </button>
+            <button
+              className="line-btn ghost-line"
+              onClick={() => setTheme((v) => (v === "dark" ? "light" : "dark"))}
+              aria-label="Toggle theme"
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
+            >
+              {theme === "dark" ? "☀" : "☾"}
             </button>
           </div>
         </div>
@@ -859,6 +883,9 @@ export default function App() {
       ) : null}
 
       {error ? <p className="error">{error}</p> : null}
+      <div className="brand-watermark" aria-hidden="true">
+        <img src="/albumdeck-logo.png" alt="" />
+      </div>
     </main>
   );
 }

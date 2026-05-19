@@ -2,12 +2,14 @@
   --bg0: #090b15;
   --bg1: #10182f;
   --bg2: #1a1f39;
+  --bg-light: #ececef;
   --glass: rgba(255, 255, 255, 0.05);
   --line: rgba(255, 255, 255, 0.14);
   --txt: #f1f4ff;
   --muted: #9ca6c5;
   --acc1: #7d4dff;
   --acc2: #f04fb5;
+  --hub-color: #1f294d;
 }
 
 * { box-sizing: border-box; }
@@ -29,6 +31,19 @@ body {
     linear-gradient(120deg, var(--bg0), var(--bg1) 52%, var(--bg2));
 }
 
+.theme-light {
+  --bg0: #e7e7eb;
+  --bg1: #ececef;
+  --bg2: #f2f2f4;
+  --glass: rgba(21, 28, 46, 0.05);
+  --line: rgba(31, 43, 73, 0.16);
+  --txt: #1d2438;
+  --muted: #566182;
+  --acc1: #ff7a1a;
+  --acc2: #ff9f58;
+  --hub-color: #ececef;
+}
+
 .app-shell {
   min-height: 100vh;
   height: 100vh;
@@ -48,6 +63,10 @@ body {
   align-items: center;
   padding: 10px 18px;
   overflow: hidden;
+}
+
+.theme-light .stage {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .stage-cover,
@@ -111,6 +130,29 @@ body {
       rgba(255, 255, 255, 0.03) 0 10px,
       rgba(255, 255, 255, 0.01) 10px 20px
     );
+}
+
+.empty-brand {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.empty-brand img {
+  width: min(260px, 70%);
+  height: auto;
+  opacity: 0.9;
+}
+
+.empty-brand span {
+  font-size: 0.95rem;
+}
+
+.theme-light .cover-empty {
+  color: #4a587e;
+  background:
+    linear-gradient(135deg, rgba(17, 24, 44, 0.07), rgba(17, 24, 44, 0.03)),
+    repeating-linear-gradient(-45deg, rgba(17, 24, 44, 0.03) 0 10px, rgba(17, 24, 44, 0.015) 10px 20px);
 }
 
 .stack-top,
@@ -253,7 +295,7 @@ body {
 .disc-hub-hole {
   width: 40px;
   height: 40px;
-  background: radial-gradient(circle at 35% 35%, #253057 0%, #1f294d 58%, #1a2344 100%);
+  background: radial-gradient(circle at 35% 35%, var(--hub-color) 0%, var(--hub-color) 100%);
   box-shadow:
     inset 0 0 0 1px rgba(232, 238, 255, 0.2),
     0 0 8px rgba(23, 33, 68, 0.42);
@@ -296,6 +338,10 @@ body {
 
 .line-btn:hover {
   background: rgba(164, 173, 255, 0.12);
+}
+
+.theme-light .line-btn:hover {
+  background: rgba(76, 93, 145, 0.13);
 }
 
 .play-line {
@@ -414,6 +460,10 @@ body {
   padding: 16px;
 }
 
+.theme-light .menu-panel {
+  background: rgba(245, 247, 252, 0.96);
+}
+
 .menu-head {
   display: flex;
   align-items: center;
@@ -476,6 +526,12 @@ body {
   font-weight: 600;
 }
 
+.theme-light .alpha-btn {
+  color: #2d395c;
+  border-color: rgba(42, 55, 91, 0.2);
+  background: rgba(42, 55, 91, 0.04);
+}
+
 .alpha-btn.active {
   background: linear-gradient(135deg, rgba(111, 140, 255, 0.46), rgba(184, 118, 255, 0.46));
   border-color: rgba(198, 213, 255, 0.7);
@@ -488,6 +544,10 @@ body {
   padding: 8px;
   color: var(--txt);
   text-align: left;
+}
+
+.theme-light .rack-item {
+  background: rgba(255, 255, 255, 0.65);
 }
 
 .rack-item.active {
@@ -557,6 +617,12 @@ body {
   padding: 9px 10px;
 }
 
+.theme-light .cd-input {
+  color: #22304e;
+  background: rgba(39, 53, 91, 0.06);
+  border-color: rgba(39, 53, 91, 0.18);
+}
+
 .cd-input-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -584,6 +650,20 @@ body {
   margin: 0;
   color: #ffb0bd;
   font-size: 0.86rem;
+}
+
+.brand-watermark {
+  position: fixed;
+  right: 20px;
+  bottom: 18px;
+  opacity: 0.1;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.brand-watermark img {
+  width: 140px;
+  height: auto;
 }
 
 .cd-center-guides {
@@ -633,7 +713,7 @@ body {
   height: 40px;
   border-radius: 999px;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle at 35% 35%, #253057 0%, #1f294d 58%, #1a2344 100%);
+  background: radial-gradient(circle at 35% 35%, var(--hub-color) 0%, var(--hub-color) 100%);
   box-shadow:
     0 0 0 2px rgba(255, 56, 168, 0.45),
     0 0 10px rgba(23, 33, 68, 0.42);
@@ -752,6 +832,10 @@ body {
     gap: 8px;
   }
 
+  .deck-tracklist li {
+    max-width: 100%;
+  }
+
   .deck-middle {
     display: block;
   }
@@ -763,6 +847,55 @@ body {
 
   .cd-editor-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .stage {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .line-btn {
+    width: 36px;
+    height: 32px;
+  }
+
+  .play-line {
+    width: 42px;
+  }
+
+  .deck-tracklist {
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+
+  .seek-row {
+    grid-template-columns: 40px 1fr 40px;
+    font-size: 0.8rem;
+  }
+
+  .brand-watermark {
+    display: none;
+  }
+}
+
+@media (min-width: 1600px) {
+  .jewel-case {
+    width: min(42vw, 760px);
+  }
+
+  .disc {
+    width: min(37vw, 720px);
+  }
+
+  .player-bar {
+    width: min(52vw, 1100px);
   }
 }
 

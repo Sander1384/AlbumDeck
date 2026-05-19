@@ -1,35 +1,126 @@
-# Navidrome CD Player
+# AlbumDeck
 
-## 1. `.env` instellen
+A tactile CD-style web player for Navidrome, with spinning disc visuals, Discogs-based custom disc cover mapping, and Docker-first deployment.
 
-Kopieer `.env.example` naar `.env` en vul:
+## Features
+
+- Navidrome albums + tracks via backend proxy
+- CD-tray style animation with load sounds
+- Custom disc cover editor per album (upload, URL, Discogs lookup)
+- Persisted disc mappings (survive refresh/restart)
+- A-Z artist filter in CD rack menu
+- Dark mode + Light mode
+- Responsive layout for tablet, desktop, laptop, TV, and mobile browsers
+
+## Device support
+
+AlbumDeck is not tablet-only.  
+It is a responsive web app and scales automatically based on screen size.
+
+Tested target classes:
+
+- Tablets (Lenovo M10 and similar)
+- Laptops/desktops
+- Large monitors / TVs (browser or kiosk mode)
+- Mobile phones
+
+## Quick start (Docker)
+
+### 1) Configure environment
+
+Copy `.env.example` to `.env` and fill in:
 
 - `NAVIDROME_URL`
 - `NAVIDROME_USER`
 - `NAVIDROME_PASS`
-- optioneel: `NAVIDROME_ALLOW_INSECURE_TLS=true` (alleen als je certificaatfouten hebt)
+- optional: `NAVIDROME_ALLOW_INSECURE_TLS=true` for self-signed certs
 
-## 2. Starten met Docker
+### 2) Start
 
-Optie A:
+Windows:
 
-- dubbelklik `start-docker.bat`
+- Double-click `start-docker.bat`
 
-Optie B:
+Or terminal:
 
-- `docker compose up -d --build`
+```bash
+docker compose up -d --build
+```
 
-## 3. Openen
+### 3) Open
 
-- Op je PC: `http://localhost:8080`
-- Op je Lenovo tablet (zelfde wifi): `http://<IP-VAN-JE-PC>:8080`
+- Local PC: `http://localhost:8080`
+- Tablet on same network: `http://<YOUR-PC-IP>:8080`
 
-Tip: vind je IP met `ipconfig` (IPv4 Address).
+Find your IP with:
 
-## 4. Data die bewaard blijft
+```powershell
+ipconfig
+```
 
-- Custom CD covers + mappings blijven bewaard in Docker volume `backend_data` (`/app/.data` in backend container).
+### 4) Stop
 
-## 5. Stoppen
+```bash
+docker compose down
+```
 
-- `docker compose down`
+## Persistent data
+
+Custom disc cover mappings are stored in Docker volume:
+
+- `backend_data` mounted at `/app/.data`
+
+So CD mappings remain after refresh/restart/redeploy.
+
+## Local dev (optional)
+
+Backend:
+
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+## Troubleshooting
+
+### `unable to get local issuer certificate`
+
+Set in `.env`:
+
+```env
+NAVIDROME_ALLOW_INSECURE_TLS=true
+```
+
+### Port already in use
+
+- Backend: `8877`
+- Frontend Docker: `8080`
+
+Change host ports in `docker-compose.yml` if needed.
+
+### Covers not saving
+
+Check backend container can write to `/app/.data` and volume `backend_data` exists.
+
+## Privacy note
+
+No private credentials are committed in this repo.  
+Use `.env` locally or in your deployment secret manager.
+
+## Roadmap
+
+- First-run web setup/login screen
+- One-click Discogs image candidate scoring
+- Kiosk profile presets (tablet/TV)
+- Optional multi-user profile storage
