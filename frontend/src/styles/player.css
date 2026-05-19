@@ -55,9 +55,9 @@ body {
 }
 
 .stage {
-  background: var(--glass);
-  border-radius: 20px;
-  backdrop-filter: blur(10px);
+  background: transparent;
+  border-radius: 0;
+  backdrop-filter: none;
   display: grid;
   grid-template-columns: 50% 50%;
   align-items: center;
@@ -67,7 +67,7 @@ body {
 }
 
 .theme-light .stage {
-  background: rgba(255, 255, 255, 0.35);
+  background: transparent;
 }
 
 .stage-cover,
