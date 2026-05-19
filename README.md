@@ -56,6 +56,9 @@ Deploy via:
 Then open:
 - `http://<NAS-IP>:8080`
 
+By default this stack is pinned to `v0.2.1`.  
+If you prefer rolling updates, change image tag to `latest`.
+
 ## Local Build Mode
 
 ```bash
@@ -80,6 +83,15 @@ Release flow:
 git tag v0.2.1
 git push origin v0.2.1
 ```
+
+## Release Checklist (Important)
+
+Before sharing the repo publicly, verify:
+- GitHub Actions run succeeded for `docker-publish.yml`
+- Container exists at `ghcr.io/sander1384/albumdeck`
+- GitHub package visibility is set to `Public`
+- `docker-compose.portainer.yml` references a real published tag
+- `README.md` links point to the current package/release
 
 ## Persistent Data
 

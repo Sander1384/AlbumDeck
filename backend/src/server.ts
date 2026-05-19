@@ -8,14 +8,14 @@ import path from "path";
 import { getAlbum, getAlbums, subsonicCoverUrl, subsonicStreamUrl, type NavidromeConfig } from "./navidrome.js";
 
 const app = express();
-const PORT = Number(process.env.APP_PORT ?? 8877);
+const PORT = Number(process.env.APP_PORT ?? 8080);
 const COVER_SIZE = Number(process.env.COVER_SIZE ?? 1200);
 const DATA_DIR = path.resolve(process.cwd(), ".data");
 const CUSTOM_COVERS_FILE = path.join(DATA_DIR, "custom-disc-covers.json");
 const NAVIDROME_URL = process.env.NAVIDROME_URL?.trim() ?? "";
 const NAVIDROME_USER = process.env.NAVIDROME_USER?.trim() ?? "";
 const NAVIDROME_PASS = process.env.NAVIDROME_PASS?.trim() ?? "";
-const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "cd-player-app";
+const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "albumdeck-app";
 const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?? "false").toLowerCase() === "true";
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
