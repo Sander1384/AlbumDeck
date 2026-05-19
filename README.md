@@ -56,7 +56,7 @@ Deploy via:
 Then open:
 - `http://<NAS-IP>:8080`
 
-By default this stack is pinned to `v0.3.1`.
+By default this stack is pinned to `v0.3.2`.
 If you prefer rolling updates, change image tag to `latest`.
 
 ## Local Build Mode
@@ -80,8 +80,8 @@ This builds the unified root [`Dockerfile`](./Dockerfile).
 Release flow:
 
 ```bash
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.3.2
+git push origin v0.3.2
 ```
 
 ## Release Checklist (Important)
@@ -106,6 +106,11 @@ Mount this path to keep data across updates.
 
 AlbumDeck can use Discogs without credentials, but a personal token makes Discogs search and image lookup more reliable.
 Set `DISCOGS_TOKEN` in your environment or Portainer stack.
+
+### Chromecast button cannot connect
+
+Use Chrome/Chromium and open AlbumDeck through a URL your Chromecast can reach, such as your NAS IP or HTTPS hostname.
+Do not cast from `localhost`, because the Chromecast will try to load that URL on itself.
 
 ### TLS certificate error
 

@@ -334,21 +334,7 @@ body {
   transition: all 0.2s ease;
 }
 
-.cast-launcher {
-  width: 38px;
-  height: 30px;
-  padding: 6px 9px;
-  border-radius: 8px;
-  color: #b8c4e8;
-  --connected-color: #d9e3ff;
-  --disconnected-color: #b8c4e8;
-}
-
-.cast-launcher:hover {
-  background: rgba(164, 173, 255, 0.12);
-}
-
-.cast-launcher.casting {
+.cast-btn.casting {
   color: #d9e3ff;
 }
 

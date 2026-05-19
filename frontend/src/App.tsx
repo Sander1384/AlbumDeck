@@ -36,7 +36,7 @@ function hashText(input: string): number {
   return Math.abs(h);
 }
 
-type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit";
+type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
@@ -47,6 +47,7 @@ function Icon({ name }: { name: IconName }) {
   if (name === "soundOff") return <svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4zM16 9l5 6M21 9l-5 6" /></svg>;
   if (name === "fullscreen") return <svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" /></svg>;
   if (name === "fullscreenExit") return <svg viewBox="0 0 24 24"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /></svg>;
+  if (name === "cast") return <svg viewBox="0 0 24 24"><path d="M4 6h16v11H4zM4 18h.01M4 14a4 4 0 0 1 4 4M4 10a8 8 0 0 1 8 8" /></svg>;
   if (name === "pause") return <svg viewBox="0 0 24 24"><path d="M8 6h3v12H8zM13 6h3v12h-3z" /></svg>;
   return <svg viewBox="0 0 24 24"><path d="M8 6l10 6-10 6z" /></svg>;
 }
@@ -234,8 +235,19 @@ export default function App() {
     img.crossOrigin = "anonymous";
 
     await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Kon cover niet laden"));
+      const timeout = window.setTimeout(() => {
+        img.onload = null;
+        img.onerror = null;
+        reject(new Error("Cover laden duurde te lang"));
+      }, 10000);
+      img.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(new Error("Kon cover niet laden"));
+      };
+      img.onload = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
       img.src = src;
     });
 
@@ -319,13 +331,24 @@ export default function App() {
 
   const ensureAudioReady = async (el: HTMLAudioElement | null) => {
     if (!el) return;
-    if (el.readyState >= 3) return;
+    if (el.readyState >= 2) return;
     await new Promise<void>((resolve) => {
-      const onReady = () => {
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        el.removeEventListener("canplay", onReady);
         el.removeEventListener("canplaythrough", onReady);
+        el.removeEventListener("loadedmetadata", onReady);
+        el.removeEventListener("error", onReady);
+      };
+      const onReady = () => {
+        cleanup();
         resolve();
       };
+      const timeout = window.setTimeout(onReady, 2500);
+      el.addEventListener("canplay", onReady);
       el.addEventListener("canplaythrough", onReady);
+      el.addEventListener("loadedmetadata", onReady);
+      el.addEventListener("error", onReady);
       el.load();
     });
   };
@@ -383,6 +406,30 @@ export default function App() {
     setIsPlaying(!isRemotePlaying);
   };
 
+  const requestCastSession = async () => {
+    const win = window as CastWindow;
+    if (!win.cast?.framework || !win.chrome?.cast) {
+      setError("Cast is niet beschikbaar. Gebruik Chrome/Chromium via HTTPS en hetzelfde netwerk als je Chromecast.");
+      return;
+    }
+
+    try {
+      const context = win.cast.framework.CastContext.getInstance();
+      const session = context.getCurrentSession() ?? await context.requestSession();
+      castSessionRef.current = session;
+      setIsCasting(Boolean(session));
+      audioRef.current?.pause();
+
+      const song = currentTrackRef.current;
+      if (song) await loadCastMedia(song);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e ?? "");
+      if (!message.includes("cancel")) {
+        setError(message || "Cast starten mislukt");
+      }
+    }
+  };
+
   const playTrackImmediate = async (song: Song) => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -415,13 +462,16 @@ export default function App() {
     const animate = opts?.animate ?? true;
     const token = Date.now();
     transitionTokenRef.current = token;
+    setError(null);
 
     try {
       const detail = await fetchAlbum(album.id);
+      if (transitionTokenRef.current !== token) return;
       const songs = detail.song ?? [];
       const firstSong = songs[0];
       if (!firstSong) return;
       const normalizedCover = await getNormalizedCover(detail.coverArt ?? album.coverArt);
+      if (transitionTokenRef.current !== token) return;
 
       setMenuOpen(false);
       setElapsed(0);
@@ -492,7 +542,12 @@ export default function App() {
 
       await playTrackImmediate(firstSong);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Kon album niet openen");
+      if (transitionTokenRef.current === token) {
+        setIsTrayClosing(false);
+        setIsFastSpin(false);
+        setIsCoverInsert(false);
+        setError(e instanceof Error ? e.message : "Kon album niet openen");
+      }
     }
   };
 
@@ -811,11 +866,14 @@ export default function App() {
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <button className="line-btn ghost-line" onClick={() => setMenuOpen(true)} aria-label="Open album menu"><Icon name="menu" /></button>
             <button className="line-btn ghost-line" onClick={openCoverEditor} aria-label="Set CD cover">CD</button>
-            <google-cast-launcher
-              className={`cast-launcher ${isCasting ? "casting" : ""}`}
+            <button
+              className={`line-btn ghost-line cast-btn ${isCasting ? "casting" : ""}`}
+              onClick={() => void requestCastSession()}
               aria-label="Cast naar Chromecast"
               title={isCastReady ? "Cast naar Chromecast" : "Cast niet beschikbaar"}
-            />
+            >
+              <Icon name="cast" />
+            </button>
             <button
               className="line-btn ghost-line"
               onClick={() => setLoadSoundsEnabled((v) => !v)}
