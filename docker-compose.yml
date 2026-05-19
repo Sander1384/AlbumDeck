@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: navidrome-cd-backend
+    env_file:
+      - .env
+    ports:
+      - "8877:8877"
+    volumes:
+      - backend_data:/app/.data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: navidrome-cd-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  backend_data:

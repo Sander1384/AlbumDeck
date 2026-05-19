@@ -1,0 +1,16 @@
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.npm-cache/
+
+.env
+backend/.data/
+
+.backup/
+
+*.log
+npm-debug.log*
+
+.DS_Store
+Thumbs.db
