@@ -17,8 +17,6 @@ jobs:
       packages: write
     env:
       IMAGE_NAME: ghcr.io/sander1384/albumdeck
-      LEGACY_IMAGE_BACKEND: ghcr.io/sander1384/albumdeck-backend
-      LEGACY_IMAGE_FRONTEND: ghcr.io/sander1384/albumdeck-frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,10 +35,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.IMAGE_NAME }}
-            ${{ env.LEGACY_IMAGE_BACKEND }}
-            ${{ env.LEGACY_IMAGE_FRONTEND }}
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=main,enable={{is_default_branch}}

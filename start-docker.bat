@@ -3,7 +3,7 @@ setlocal
 
 cd /d "%~dp0"
 echo.
-echo Starting Navidrome CD Player with Docker...
+echo Starting AlbumDeck with Docker...
 docker compose up -d --build
 if errorlevel 1 (
   echo.
