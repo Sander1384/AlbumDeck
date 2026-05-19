@@ -47,10 +47,10 @@ body {
 .app-shell {
   min-height: 100vh;
   height: 100vh;
-  padding: 22px;
+  padding: 10px;
   display: grid;
-  grid-template-rows: 1fr 156px;
-  gap: 14px;
+  grid-template-rows: 1fr 104px;
+  gap: 6px;
   overflow: clip;
 }
 
@@ -61,7 +61,7 @@ body {
   display: grid;
   grid-template-columns: 50% 50%;
   align-items: center;
-  padding: 10px 18px;
+  padding: 4px 8px;
   overflow: hidden;
   min-height: 0;
 }
@@ -81,7 +81,7 @@ body {
 
 .jewel-case {
   position: relative;
-  width: min(47vw, calc(100vh - 244px), 700px);
+  width: min(48vw, calc(100vh - 136px), 820px);
   aspect-ratio: 1 / 1;
   border-radius: 0;
   padding: 0;
@@ -186,7 +186,7 @@ body {
 }
 
 .disc {
-  width: min(44vw, calc(100vh - 244px), 700px);
+  width: min(46vw, calc(100vh - 136px), 820px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   position: relative;
@@ -304,10 +304,10 @@ body {
   border-radius: 0;
   backdrop-filter: none;
   width: min(58vw, 980px);
-  padding: 10px 14px 8px;
+  padding: 4px 14px 4px;
   display: grid;
   grid-template-rows: auto auto auto;
-  gap: 6px;
+  gap: 2px;
 }
 
 .deck-top {
@@ -323,8 +323,8 @@ body {
 }
 
 .line-btn {
-  width: 42px;
-  height: 34px;
+  width: 38px;
+  height: 30px;
   border-radius: 8px;
   border: 0;
   background: transparent;
@@ -343,7 +343,7 @@ body {
 }
 
 .play-line {
-  width: 50px;
+  width: 44px;
   background: transparent;
   color: #f5f7ff;
 }
@@ -376,8 +376,8 @@ body {
   margin: 0;
   padding: 0 0 0 18px;
   color: #9baad4;
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: 0.72rem;
+  line-height: 1.28;
   transition: transform 220ms ease, opacity 220ms ease;
 }
 
@@ -419,7 +419,7 @@ body {
   align-items: center;
   gap: 8px;
   color: #d8e1ff;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .slider {
@@ -868,37 +868,37 @@ body {
 
 @media (min-width: 1600px) {
   .jewel-case {
-    width: min(42vw, calc(100vh - 244px), 760px);
+    width: min(48vw, calc(100vh - 136px), 860px);
   }
 
   .disc {
-    width: min(37vw, calc(100vh - 244px), 720px);
+    width: min(46vw, calc(100vh - 136px), 860px);
   }
 
   .player-bar {
-    width: min(52vw, 1100px);
+    width: min(52vw, 1040px);
   }
 }
 
 /* Lenovo Tab M10 tuning (16:10) */
 @media (min-width: 1200px) and (max-width: 1400px) and (min-height: 760px) and (max-height: 860px) {
   .app-shell {
-    padding: 16px;
-    grid-template-rows: 1fr 144px;
-    gap: 10px;
+    padding: 8px;
+    grid-template-rows: 1fr 104px;
+    gap: 6px;
   }
 
   .stage {
-    padding: 18px;
-    grid-template-columns: 52% 48%;
+    padding: 4px 8px;
+    grid-template-columns: 50% 50%;
   }
 
   .jewel-case {
-    width: min(44vw, 560px);
+    width: min(48vw, calc(100vh - 126px), 700px);
   }
 
   .disc {
-    width: min(33vw, 460px);
+    width: min(46vw, calc(100vh - 126px), 700px);
   }
 }
 
