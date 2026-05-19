@@ -5,11 +5,13 @@ import express from "express";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
-import { getAlbum, getAlbums, subsonicCoverUrl, subsonicStreamUrl, type NavidromeConfig } from "./navidrome.js";
+import { getAlbum, getAlbums, getAllAlbums, subsonicCoverUrl, subsonicStreamUrl, type NavidromeConfig } from "./navidrome.js";
 
 const app = express();
 const PORT = Number(process.env.APP_PORT ?? 8080);
 const COVER_SIZE = Number(process.env.COVER_SIZE ?? 1200);
+const ALBUM_BATCH_SIZE = Number(process.env.NAVIDROME_ALBUM_BATCH_SIZE ?? 500);
+const MAX_ALBUMS = Number(process.env.NAVIDROME_MAX_ALBUMS ?? 20000);
 const DATA_DIR = path.resolve(process.cwd(), ".data");
 const CUSTOM_COVERS_FILE = path.join(DATA_DIR, "custom-disc-covers.json");
 const NAVIDROME_URL = process.env.NAVIDROME_URL?.trim() ?? "";
@@ -18,7 +20,7 @@ const NAVIDROME_PASS = process.env.NAVIDROME_PASS?.trim() ?? "";
 const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "albumdeck-app";
 const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?? "false").toLowerCase() === "true";
 const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN?.trim() ?? "";
-const DISCOGS_USER_AGENT = "AlbumDeck/0.2.6 +https://github.com/Sander1384/AlbumDeck";
+const DISCOGS_USER_AGENT = "AlbumDeck/0.3.0 +https://github.com/Sander1384/AlbumDeck";
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
   throw new Error("Missing NAVIDROME_URL/NAVIDROME_USER/NAVIDROME_PASS in environment");
@@ -169,10 +171,16 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/albums", async (req, res) => {
   try {
-    const size = Number(req.query.size ?? 50);
-    const offset = Number(req.query.offset ?? 0);
-    const albums = await getAlbums(navidromeConfig, size, offset);
-    res.json({ albums });
+    if (req.query.size !== undefined || req.query.offset !== undefined) {
+      const size = Number(req.query.size ?? 50);
+      const offset = Number(req.query.offset ?? 0);
+      const albums = await getAlbums(navidromeConfig, size, offset);
+      res.json({ albums, count: albums.length, offset, size });
+      return;
+    }
+
+    const albums = await getAllAlbums(navidromeConfig, ALBUM_BATCH_SIZE, MAX_ALBUMS);
+    res.json({ albums, count: albums.length });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }

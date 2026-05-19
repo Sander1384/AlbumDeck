@@ -1,6 +1,6 @@
 services:
   albumdeck:
-    image: ghcr.io/sander1384/albumdeck:v0.2.9
+    image: ghcr.io/sander1384/albumdeck:v0.3.0
     container_name: albumdeck
     restart: unless-stopped
     environment:
@@ -9,6 +9,8 @@ services:
       NAVIDROME_PASS: "your_pass_or_token"
       NAVIDROME_CLIENT: "albumdeck-app"
       NAVIDROME_ALLOW_INSECURE_TLS: "false"
+      NAVIDROME_ALBUM_BATCH_SIZE: "500"
+      NAVIDROME_MAX_ALBUMS: "20000"
       DISCOGS_TOKEN: ""
       APP_PORT: "8080"
     ports:

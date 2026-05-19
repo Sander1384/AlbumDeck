@@ -76,6 +76,28 @@ export async function getAlbums(cfg: NavidromeConfig, size = 50, offset = 0): Pr
   return data.albumList2?.album ?? [];
 }
 
+export async function getAllAlbums(cfg: NavidromeConfig, batchSize = 500, maxAlbums = 20000): Promise<Album[]> {
+  const albums: Album[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+
+  while (offset < maxAlbums) {
+    const page = await getAlbums(cfg, batchSize, offset);
+    if (!page.length) break;
+
+    for (const album of page) {
+      if (seen.has(album.id)) continue;
+      seen.add(album.id);
+      albums.push(album);
+    }
+
+    if (page.length < batchSize) break;
+    offset += batchSize;
+  }
+
+  return albums;
+}
+
 export async function getAlbum(cfg: NavidromeConfig, id: string): Promise<{ album: Album & { song?: Song[] } }> {
   const data = await callSubsonic<{ album?: Album & { song?: Song[] } }>(cfg, "getAlbum", { id });
 
