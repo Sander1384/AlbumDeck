@@ -56,7 +56,7 @@ Deploy via:
 Then open:
 - `http://<NAS-IP>:8080`
 
-By default this stack is pinned to `v0.2.3`.  
+By default this stack is pinned to `v0.2.4`.  
 If you prefer rolling updates, change image tag to `latest`.
 
 ## Local Build Mode
@@ -80,8 +80,8 @@ This builds the unified root [`Dockerfile`](./Dockerfile).
 Release flow:
 
 ```bash
-git tag v0.2.3
-git push origin v0.2.3
+git tag v0.2.4
+git push origin v0.2.4
 ```
 
 ## Release Checklist (Important)
@@ -101,6 +101,11 @@ CD cover mappings are stored at:
 Mount this path to keep data across updates.
 
 ## Troubleshooting
+
+### Discogs search or image lookup fails
+
+AlbumDeck can use Discogs without credentials, but a personal token makes Discogs search and image lookup more reliable.
+Set `DISCOGS_TOKEN` in your environment or Portainer stack.
 
 ### TLS certificate error
 

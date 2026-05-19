@@ -16,10 +16,19 @@ export type Song = {
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 const COVER_SIZE = Number((import.meta.env.VITE_COVER_SIZE as string | undefined) ?? 1200);
 
+async function responseError(response: Response): Promise<Error> {
+  try {
+    const payload = (await response.json()) as { error?: string };
+    return new Error(payload.error ?? `API error ${response.status}`);
+  } catch {
+    return new Error(`API error ${response.status}`);
+  }
+}
+
 async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`);
   if (!response.ok) {
-    throw new Error(`API error ${response.status}`);
+    throw await responseError(response);
   }
   return (await response.json()) as T;
 }
@@ -49,12 +58,7 @@ export function proxyImageUrl(url: string): string {
 export async function fetchDiscogsImages(url: string): Promise<string[]> {
   const response = await fetch(`${API_BASE}/discogs-images?url=${encodeURIComponent(url)}`);
   if (!response.ok) {
-    try {
-      const payload = (await response.json()) as { error?: string };
-      throw new Error(payload.error ?? `API error ${response.status}`);
-    } catch {
-      throw new Error(`API error ${response.status}`);
-    }
+    throw await responseError(response);
   }
   const data = (await response.json()) as { images?: string[] };
   return data.images ?? [];
@@ -63,12 +67,7 @@ export async function fetchDiscogsImages(url: string): Promise<string[]> {
 export async function searchDiscogs(query: string): Promise<Array<{ title: string; url: string }>> {
   const response = await fetch(`${API_BASE}/discogs-search?q=${encodeURIComponent(query)}`);
   if (!response.ok) {
-    try {
-      const payload = (await response.json()) as { error?: string };
-      throw new Error(payload.error ?? `API error ${response.status}`);
-    } catch {
-      throw new Error(`API error ${response.status}`);
-    }
+    throw await responseError(response);
   }
   const data = (await response.json()) as { results?: Array<{ title: string; url: string }> };
   return data.results ?? [];
@@ -86,11 +85,6 @@ export async function saveCustomDiscCovers(covers: object): Promise<void> {
     body: JSON.stringify({ covers })
   });
   if (!response.ok) {
-    try {
-      const payload = (await response.json()) as { error?: string };
-      throw new Error(payload.error ?? `API error ${response.status}`);
-    } catch {
-      throw new Error(`API error ${response.status}`);
-    }
+    throw await responseError(response);
   }
 }

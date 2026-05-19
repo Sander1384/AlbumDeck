@@ -17,6 +17,8 @@ const NAVIDROME_USER = process.env.NAVIDROME_USER?.trim() ?? "";
 const NAVIDROME_PASS = process.env.NAVIDROME_PASS?.trim() ?? "";
 const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "albumdeck-app";
 const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?? "false").toLowerCase() === "true";
+const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN?.trim() ?? "";
+const DISCOGS_USER_AGENT = "AlbumDeck/0.2.4 +https://github.com/Sander1384/AlbumDeck";
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
   throw new Error("Missing NAVIDROME_URL/NAVIDROME_USER/NAVIDROME_PASS in environment");
@@ -46,6 +48,100 @@ async function readCustomCovers(): Promise<Record<string, unknown>> {
 async function writeCustomCovers(data: Record<string, unknown>): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(CUSTOM_COVERS_FILE, JSON.stringify(data, null, 2), "utf8");
+}
+
+function discogsHeaders(accept = "application/json"): Record<string, string> {
+  const headers: Record<string, string> = {
+    accept,
+    "user-agent": DISCOGS_USER_AGENT
+  };
+  if (DISCOGS_TOKEN) {
+    headers.authorization = `Discogs token=${DISCOGS_TOKEN}`;
+  }
+  return headers;
+}
+
+function parseDiscogsPageUrl(rawUrl: string): { kind: "release" | "master"; id: string } | null {
+  const target = new URL(rawUrl);
+  if (!/(^|\.)discogs\.com$/i.test(target.hostname)) return null;
+
+  const parts = target.pathname.split("/").filter(Boolean);
+  const kind = parts[0];
+  const id = parts[1];
+  if ((kind === "release" || kind === "master") && id && /^\d+$/.test(id)) {
+    return { kind, id };
+  }
+  return null;
+}
+
+function cleanDiscogsImageUrl(url: string): string {
+  return url.replace(/\\u002F/g, "/").replace(/&amp;/g, "&");
+}
+
+function extractDiscogsImagesFromHtml(html: string): string[] {
+  const matches = new Set<string>();
+  const add = (url: string) => matches.add(cleanDiscogsImageUrl(url));
+
+  const directRe = /https?:\/\/(?:i|img|api-img)\.discogs\.com\/[^"'\\\s<>()]+/gi;
+  let directMatch: RegExpExecArray | null;
+  while ((directMatch = directRe.exec(html)) !== null) add(directMatch[0]);
+
+  const jsonImageRe = /"(?:uri|resource_url|thumbnail|thumb|image)"\s*:\s*"(https?:\/\/(?:i|img|api-img)\.discogs\.com\/[^"]+)"/gi;
+  let jsonMatch: RegExpExecArray | null;
+  while ((jsonMatch = jsonImageRe.exec(html)) !== null) add(jsonMatch[1]);
+
+  return Array.from(matches);
+}
+
+async function getDiscogsImagesFromApi(kind: "release" | "master", id: string): Promise<string[]> {
+  const endpoint = kind === "release" ? "releases" : "masters";
+  const response = await axios.get<{
+    images?: Array<{ uri?: string; resource_url?: string; uri150?: string }>;
+  }>(`https://api.discogs.com/${endpoint}/${id}`, {
+    timeout: 20000,
+    headers: discogsHeaders()
+  });
+
+  const images = response.data.images ?? [];
+  return images
+    .flatMap((img) => [img.uri, img.resource_url, img.uri150])
+    .filter((url): url is string => Boolean(url));
+}
+
+async function getDiscogsImagesFromHtml(url: string): Promise<string[]> {
+  const response = await axios.get<string>(url, {
+    responseType: "text",
+    timeout: 20000,
+    headers: discogsHeaders("text/html,application/xhtml+xml")
+  });
+
+  const html = response.data;
+  const matches = new Set(extractDiscogsImagesFromHtml(html));
+  const imagePageLinks = new Set<string>();
+  const pageRe = /href="(\/(?:master|release)\/[^\"]+\/image\/[^\"]+)"/gi;
+  let pageMatch: RegExpExecArray | null;
+  while ((pageMatch = pageRe.exec(html)) !== null) {
+    const rel = pageMatch[1].split("?")[0];
+    imagePageLinks.add(`https://www.discogs.com${rel}`);
+  }
+
+  const imagePages = Array.from(imagePageLinks).slice(0, 24);
+  await Promise.all(
+    imagePages.map(async (pageUrl) => {
+      try {
+        const page = await axios.get<string>(pageUrl, {
+          responseType: "text",
+          timeout: 20000,
+          headers: discogsHeaders("text/html,application/xhtml+xml")
+        });
+        extractDiscogsImagesFromHtml(page.data).forEach((image) => matches.add(image));
+      } catch {
+        // ignore single page failure
+      }
+    })
+  );
+
+  return Array.from(matches);
 }
 
 app.get("/api/health", (_req, res) => {
@@ -148,59 +244,34 @@ app.get("/api/discogs-images", async (req, res) => {
     }
 
     const target = new URL(rawUrl);
-    if (!target.hostname.toLowerCase().includes("discogs.com")) {
+    const host = target.hostname.toLowerCase();
+    if (host === "i.discogs.com" || host === "img.discogs.com" || host === "api-img.discogs.com") {
+      res.json({ images: [target.toString()] });
+      return;
+    }
+
+    if (!/(^|\.)discogs\.com$/i.test(target.hostname)) {
       res.status(400).json({ error: "Only discogs.com URLs are allowed" });
       return;
     }
 
-    const response = await axios.get<string>(target.toString(), {
-      responseType: "text",
-      timeout: 20000,
-      headers: { "user-agent": "navidrome-cd-player/1.0" }
-    });
-
-    const html = response.data;
-    const matches = new Set<string>();
-
-    const addImageMatches = (input: string) => {
-      const re = /https?:\/\/(?:i|img)\.discogs\.com\/[^"'\\\s<>()]+/gi;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(input)) !== null) {
-        const candidate = m[0].replace(/\\u002F/g, "/").replace(/&amp;/g, "&");
-        matches.add(candidate);
+    const page = parseDiscogsPageUrl(target.toString());
+    let images: string[] = [];
+    if (page) {
+      try {
+        images = await getDiscogsImagesFromApi(page.kind, page.id);
+      } catch {
+        images = [];
       }
-    };
-
-    addImageMatches(html);
-
-    const imagePageLinks = new Set<string>();
-    const pageRe = /href="(\/(?:master|release)\/[^\"]+\/image\/[^\"]+)"/gi;
-    let pageMatch: RegExpExecArray | null;
-    while ((pageMatch = pageRe.exec(html)) !== null) {
-      const rel = pageMatch[1].split("?")[0];
-      imagePageLinks.add(`https://www.discogs.com${rel}`);
+    }
+    if (!images.length) {
+      images = await getDiscogsImagesFromHtml(target.toString());
     }
 
-    const imagePages = Array.from(imagePageLinks).slice(0, 60);
-    await Promise.all(
-      imagePages.map(async (pageUrl) => {
-        try {
-          const page = await axios.get<string>(pageUrl, {
-            responseType: "text",
-            timeout: 20000,
-            headers: { "user-agent": "navidrome-cd-player/1.0" }
-          });
-          addImageMatches(page.data);
-        } catch {
-          // ignore single page failure
-        }
-      })
-    );
-
-    const images = Array.from(matches).slice(0, 120);
+    images = Array.from(new Set(images.map(cleanDiscogsImageUrl))).slice(0, 120);
     res.json({ images });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : "Discogs image lookup failed" });
+    res.status(502).json({ error: error instanceof Error ? error.message : "Discogs image lookup failed" });
   }
 });
 
@@ -212,32 +283,57 @@ app.get("/api/discogs-search", async (req, res) => {
       return;
     }
 
-    const searchUrl = `https://www.discogs.com/search/?q=${encodeURIComponent(q)}&type=all`;
-    const response = await axios.get<string>(searchUrl, {
-      responseType: "text",
-      timeout: 20000,
-      headers: { "user-agent": "navidrome-cd-player/1.0" }
-    });
-
-    const html = response.data;
     const results: Array<{ title: string; url: string }> = [];
     const seen = new Set<string>();
-    const re = /href="(\/(?:master|release)\/[^\"]+)"[^>]*>([^<]+)</gi;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(html)) !== null) {
-      const rel = m[1];
-      const title = m[2].replace(/\s+/g, " ").trim();
-      if (!title) continue;
-      const url = `https://www.discogs.com${rel.split("?")[0]}`;
-      if (seen.has(url)) continue;
-      seen.add(url);
-      results.push({ title, url });
-      if (results.length >= 20) break;
+
+    try {
+      const response = await axios.get<{
+        results?: Array<{ title?: string; uri?: string; type?: string }>;
+      }>("https://api.discogs.com/database/search", {
+        timeout: 20000,
+        headers: discogsHeaders(),
+        params: { q, type: "release", per_page: 20, page: 1 }
+      });
+
+      for (const item of response.data.results ?? []) {
+        const rel = item.uri;
+        const title = item.title?.replace(/\s+/g, " ").trim();
+        if (!rel || !title) continue;
+        const url = rel.startsWith("http") ? rel : `https://www.discogs.com${rel}`;
+        if (seen.has(url)) continue;
+        seen.add(url);
+        results.push({ title, url });
+      }
+    } catch {
+      // Fall back to the public HTML page when the API is unavailable.
+    }
+
+    if (!results.length) {
+      const searchUrl = `https://www.discogs.com/search/?q=${encodeURIComponent(q)}&type=all`;
+      const response = await axios.get<string>(searchUrl, {
+        responseType: "text",
+        timeout: 20000,
+        headers: discogsHeaders("text/html,application/xhtml+xml")
+      });
+
+      const html = response.data;
+      const re = /href="(\/(?:master|release)\/[^\"]+)"[^>]*>([^<]+)</gi;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(html)) !== null) {
+        const rel = m[1];
+        const title = m[2].replace(/\s+/g, " ").trim();
+        if (!title) continue;
+        const url = `https://www.discogs.com${rel.split("?")[0]}`;
+        if (seen.has(url)) continue;
+        seen.add(url);
+        results.push({ title, url });
+        if (results.length >= 20) break;
+      }
     }
 
     res.json({ results });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : "Discogs search failed" });
+    res.status(502).json({ error: error instanceof Error ? error.message : "Discogs search failed" });
   }
 });
 
