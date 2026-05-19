@@ -1,0 +1,13 @@
+.git
+.github
+.agents
+.backup
+node_modules
+**/node_modules
+**/dist
+**/.env
+.env
+npm-debug.log*
+**/npm-debug.log*
+frontend/tsconfig.tsbuildinfo
+navidrome-cd-player-plan.md
