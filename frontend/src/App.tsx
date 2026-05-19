@@ -59,6 +59,12 @@ type CustomDiscCover = {
   rotate: number;
 };
 
+type CastWindow = Window & {
+  __onGCastApiAvailable?: (isAvailable: boolean) => void;
+  cast?: any;
+  chrome?: any;
+};
+
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 
@@ -70,6 +76,11 @@ export default function App() {
   const transitionTokenRef = useRef(0);
   const playTokenRef = useRef(0);
   const normalizedCoverCacheRef = useRef<Map<string, string>>(new Map());
+  const castSessionRef = useRef<any>(null);
+  const isCastingRef = useRef(false);
+  const currentTrackRef = useRef<Song | undefined>(undefined);
+  const selectedAlbumRef = useRef<Album | null>(null);
+  const currentCoverSrcRef = useRef<string | null>(null);
 
   const [albums, setAlbums] = useState<Album[]>([]);
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
@@ -116,6 +127,8 @@ export default function App() {
     }
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCastReady, setIsCastReady] = useState(false);
+  const [isCasting, setIsCasting] = useState(false);
 
   const coverTimersRef = useRef<number[]>([]);
 
@@ -151,6 +164,13 @@ export default function App() {
       return artistLetterFilter === "#";
     });
   }, [albums, artistLetterFilter]);
+
+  useEffect(() => {
+    currentTrackRef.current = currentTrack;
+    selectedAlbumRef.current = selectedAlbum;
+    currentCoverSrcRef.current = currentCoverSrc;
+    isCastingRef.current = isCasting;
+  }, [currentTrack, currentCoverSrc, isCasting, selectedAlbum]);
 
   useEffect(() => {
     setIsTopArtReady(false);
@@ -317,14 +337,66 @@ export default function App() {
     return Math.round(d * 1000);
   };
 
-  const playTrackImmediate = async (songId: string) => {
+  const absoluteUrl = (url: string) => new URL(url, window.location.href).toString();
+
+  const loadCastMedia = async (song: Song) => {
+    const win = window as CastWindow;
+    const session = castSessionRef.current;
+    if (!session || !win.chrome?.cast) return false;
+
+    const album = selectedAlbumRef.current;
+    const mediaInfo = new win.chrome.cast.media.MediaInfo(absoluteUrl(streamUrl(song.id)), "audio/mpeg");
+    mediaInfo.streamType = win.chrome.cast.media.StreamType.BUFFERED;
+    if (song.duration) mediaInfo.duration = song.duration;
+
+    const metadata = new win.chrome.cast.media.MusicTrackMediaMetadata();
+    metadata.title = cleanTrackTitle(song.title) || song.title || "AlbumDeck";
+    metadata.artist = song.artist ?? album?.artist ?? "";
+    metadata.albumName = album?.name ?? "";
+
+    const imageSrc = currentCoverSrcRef.current ?? coverUrl(album?.coverArt);
+    if (imageSrc) {
+      metadata.images = [new win.chrome.cast.Image(absoluteUrl(imageSrc))];
+    }
+
+    mediaInfo.metadata = metadata;
+
+    const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
+    request.autoplay = true;
+    await session.loadMedia(request);
+    setIsPlaying(true);
+    return true;
+  };
+
+  const toggleCastPlayback = async () => {
+    const win = window as CastWindow;
+    const media = castSessionRef.current?.getMediaSession?.();
+    if (!media || !win.chrome?.cast) return;
+
+    const isRemotePlaying = media.playerState === win.chrome.cast.media.PlayerState.PLAYING;
+    await new Promise<void>((resolve, reject) => {
+      const done = () => resolve();
+      const fail = (err: unknown) => reject(err instanceof Error ? err : new Error("Cast bediening mislukt"));
+      if (isRemotePlaying) media.pause(null, done, fail);
+      else media.play(null, done, fail);
+    });
+    setIsPlaying(!isRemotePlaying);
+  };
+
+  const playTrackImmediate = async (song: Song) => {
     const audio = audioRef.current;
     if (!audio) return;
     const myPlayToken = ++playTokenRef.current;
 
     stopFadeTimer();
     audio.pause();
-    audio.src = streamUrl(songId);
+
+    if (isCastingRef.current && castSessionRef.current) {
+      await loadCastMedia(song);
+      return;
+    }
+
+    audio.src = streamUrl(song.id);
     audio.volume = 1;
     audio.load();
 
@@ -363,7 +435,7 @@ export default function App() {
         setIsDiscFlipped(false);
         setIsFastSpin(false);
         setIsTrayClosing(false);
-        await playTrackImmediate(firstSong.id);
+        await playTrackImmediate(firstSong);
         return;
       }
 
@@ -418,7 +490,7 @@ export default function App() {
       await new Promise((resolve) => window.setTimeout(resolve, spinMs));
       if (transitionTokenRef.current !== token) return;
 
-      await playTrackImmediate(firstSong.id);
+      await playTrackImmediate(firstSong);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Kon album niet openen");
     }
@@ -458,7 +530,58 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    let disposed = false;
+    const win = window as CastWindow;
+
+    const initializeCast = (isAvailable: boolean) => {
+      if (disposed || !isAvailable || !win.cast?.framework || !win.chrome?.cast) return;
+
+      const context = win.cast.framework.CastContext.getInstance();
+      context.setOptions({
+        receiverApplicationId: win.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: win.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+      });
+
+      setIsCastReady(true);
+      castSessionRef.current = context.getCurrentSession();
+      setIsCasting(Boolean(castSessionRef.current));
+
+      context.addEventListener(win.cast.framework.CastContextEventType.SESSION_STATE_CHANGED, (event: any) => {
+        const state = event.sessionState;
+        const active =
+          state === win.cast.framework.SessionState.SESSION_STARTED ||
+          state === win.cast.framework.SessionState.SESSION_RESUMED;
+
+        castSessionRef.current = active ? context.getCurrentSession() : null;
+        setIsCasting(active);
+
+        if (active) {
+          audioRef.current?.pause();
+          const song = currentTrackRef.current;
+          if (song) void loadCastMedia(song).catch((e) => setError(e instanceof Error ? e.message : "Cast laden mislukt"));
+        }
+      });
+    };
+
+    if (win.cast?.framework && win.chrome?.cast) {
+      initializeCast(true);
+    } else {
+      win.__onGCastApiAvailable = initializeCast;
+    }
+
+    return () => {
+      disposed = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const togglePlay = async () => {
+    if (isCastingRef.current) {
+      await toggleCastPlayback();
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
@@ -476,7 +599,7 @@ export default function App() {
     const idx = (trackIndex - 1 + tracks.length) % tracks.length;
     setTrackIndex(idx);
     setElapsed(0);
-    await playTrackImmediate(tracks[idx].id);
+    await playTrackImmediate(tracks[idx]);
   };
 
   const next = async () => {
@@ -485,7 +608,7 @@ export default function App() {
     const idx = (trackIndex + 1) % tracks.length;
     setTrackIndex(idx);
     setElapsed(0);
-    await playTrackImmediate(tracks[idx].id);
+    await playTrackImmediate(tracks[idx]);
   };
 
   const seek = (value: number) => {
@@ -688,6 +811,11 @@ export default function App() {
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <button className="line-btn ghost-line" onClick={() => setMenuOpen(true)} aria-label="Open album menu"><Icon name="menu" /></button>
             <button className="line-btn ghost-line" onClick={openCoverEditor} aria-label="Set CD cover">CD</button>
+            <google-cast-launcher
+              className={`cast-launcher ${isCasting ? "casting" : ""}`}
+              aria-label="Cast naar Chromecast"
+              title={isCastReady ? "Cast naar Chromecast" : "Cast niet beschikbaar"}
+            />
             <button
               className="line-btn ghost-line"
               onClick={() => setLoadSoundsEnabled((v) => !v)}
