@@ -36,7 +36,7 @@ function hashText(input: string): number {
   return Math.abs(h);
 }
 
-type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff";
+type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
@@ -45,6 +45,8 @@ function Icon({ name }: { name: IconName }) {
   if (name === "next") return <svg viewBox="0 0 24 24"><path d="M17 6v12M6 7l8 5-8 5z" /></svg>;
   if (name === "sound") return <svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4zM17 9a5 5 0 0 1 0 6M19.5 6.5a8.5 8.5 0 0 1 0 11" /></svg>;
   if (name === "soundOff") return <svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4zM16 9l5 6M21 9l-5 6" /></svg>;
+  if (name === "fullscreen") return <svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" /></svg>;
+  if (name === "fullscreenExit") return <svg viewBox="0 0 24 24"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /></svg>;
   if (name === "pause") return <svg viewBox="0 0 24 24"><path d="M8 6h3v12H8zM13 6h3v12h-3z" /></svg>;
   return <svg viewBox="0 0 24 24"><path d="M8 6l10 6-10 6z" /></svg>;
 }
@@ -59,7 +61,6 @@ type CustomDiscCover = {
 
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
-const THEME_STORAGE_KEY = "albumdeck-theme-v1";
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -114,14 +115,7 @@ export default function App() {
       return true;
     }
   });
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
-    try {
-      const raw = localStorage.getItem(THEME_STORAGE_KEY);
-      return raw === "light" ? "light" : "dark";
-    } catch {
-      return "dark";
-    }
-  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const coverTimersRef = useRef<number[]>([]);
 
@@ -199,10 +193,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(LOAD_SOUNDS_STORAGE_KEY, String(loadSoundsEnabled));
   }, [loadSoundsEnabled]);
-
-  useEffect(() => {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
 
   const stopFadeTimer = () => {
     if (fadeTimerRef.current !== null) {
@@ -505,6 +495,25 @@ export default function App() {
     setElapsed(value);
   };
 
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    onFullscreenChange();
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+      await document.documentElement.requestFullscreen();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fullscreen niet beschikbaar");
+    }
+  };
+
   const art = topCover?.src ?? currentCoverSrc ?? coverUrl(selectedAlbum?.coverArt);
   const discSource = currentCustomDisc ? resolveEditorPreviewSource(currentCustomDisc.source) : art;
   const discArtStyle = currentCustomDisc
@@ -605,7 +614,7 @@ export default function App() {
   };
 
   return (
-    <main className={`app-shell theme-${theme}`}>
+    <main className="app-shell theme-dark">
       <audio
         ref={audioRef}
         onTimeUpdate={(e) => setElapsed((e.target as HTMLAudioElement).currentTime)}
@@ -689,11 +698,11 @@ export default function App() {
             </button>
             <button
               className="line-btn ghost-line"
-              onClick={() => setTheme((v) => (v === "dark" ? "light" : "dark"))}
-              aria-label="Toggle theme"
-              title={theme === "dark" ? "Light mode" : "Dark mode"}
+              onClick={() => void toggleFullscreen()}
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              title={isFullscreen ? "Volledig scherm uit" : "Volledig scherm"}
             >
-              {theme === "dark" ? "☀" : "☾"}
+              <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} />
             </button>
           </div>
         </div>
