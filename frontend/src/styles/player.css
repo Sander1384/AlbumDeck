@@ -886,8 +886,8 @@ body {
   }
 }
 
-/* Lenovo Tab M10 tuning (16:10) */
-@media (min-width: 1200px) and (max-width: 1400px) and (min-height: 760px) and (max-height: 860px) {
+/* Tablet/kiosk landscape tuning */
+@media (min-width: 1000px) and (max-height: 950px) and (orientation: landscape) {
   .app-shell {
     padding: 8px 12px 8px 52px;
     grid-template-rows: 1fr 42px;
