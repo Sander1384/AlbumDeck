@@ -21,6 +21,7 @@ const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "albumdeck-app"
 const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?? "false").toLowerCase() === "true";
 const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN?.trim() ?? "";
 const DISCOGS_USER_AGENT = "AlbumDeck/0.3.0 +https://github.com/Sander1384/AlbumDeck";
+let customCoverWriteQueue: Promise<void> = Promise.resolve();
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
   throw new Error("Missing NAVIDROME_URL/NAVIDROME_USER/NAVIDROME_PASS in environment");
@@ -49,7 +50,29 @@ async function readCustomCovers(): Promise<Record<string, unknown>> {
 
 async function writeCustomCovers(data: Record<string, unknown>): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(CUSTOM_COVERS_FILE, JSON.stringify(data, null, 2), "utf8");
+  const tmp = `${CUSTOM_COVERS_FILE}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
+  await fs.rename(tmp, CUSTOM_COVERS_FILE);
+}
+
+async function updateCustomCovers(mutator: (covers: Record<string, unknown>) => void): Promise<Record<string, unknown>> {
+  const run = customCoverWriteQueue.then(async () => {
+    const covers = await readCustomCovers();
+    mutator(covers);
+    await writeCustomCovers(covers);
+    return covers;
+  });
+  customCoverWriteQueue = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
+function isCustomCoverPayload(cover: unknown): cover is Record<string, unknown> {
+  if (!cover || typeof cover !== "object" || Array.isArray(cover)) return false;
+  const candidate = cover as Record<string, unknown>;
+  return typeof candidate.source === "string";
 }
 
 function discogsHeaders(accept = "application/json"): Record<string, string> {
@@ -366,6 +389,7 @@ app.get("/api/discogs-search", async (req, res) => {
 
 app.get("/api/custom-disc-covers", async (_req, res) => {
   try {
+    await customCoverWriteQueue;
     const covers = await readCustomCovers();
     res.json({ covers });
   } catch (error) {
@@ -380,10 +404,45 @@ app.put("/api/custom-disc-covers", async (req, res) => {
       res.status(400).json({ error: "Invalid covers payload" });
       return;
     }
-    await writeCustomCovers(covers as Record<string, unknown>);
+    await updateCustomCovers((existing) => {
+      Object.assign(existing, covers);
+    });
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save covers" });
+  }
+});
+
+app.put("/api/custom-disc-covers/:albumId", async (req, res) => {
+  try {
+    const albumId = req.params.albumId?.trim();
+    const cover = req.body?.cover;
+    if (!albumId || !isCustomCoverPayload(cover)) {
+      res.status(400).json({ error: "Invalid cover payload" });
+      return;
+    }
+    await updateCustomCovers((covers) => {
+      covers[albumId] = cover;
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to save cover" });
+  }
+});
+
+app.delete("/api/custom-disc-covers/:albumId", async (req, res) => {
+  try {
+    const albumId = req.params.albumId?.trim();
+    if (!albumId) {
+      res.status(400).json({ error: "Invalid album id" });
+      return;
+    }
+    await updateCustomCovers((covers) => {
+      delete covers[albumId];
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Failed to delete cover" });
   }
 });
 

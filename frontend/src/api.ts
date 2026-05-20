@@ -94,3 +94,23 @@ export async function saveCustomDiscCovers(covers: object): Promise<void> {
     throw await responseError(response);
   }
 }
+
+export async function saveCustomDiscCover(albumId: string, cover: object): Promise<void> {
+  const response = await fetch(`${API_BASE}/custom-disc-covers/${encodeURIComponent(albumId)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cover })
+  });
+  if (!response.ok) {
+    throw await responseError(response);
+  }
+}
+
+export async function deleteCustomDiscCover(albumId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/custom-disc-covers/${encodeURIComponent(albumId)}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) {
+    throw await responseError(response);
+  }
+}

@@ -4,8 +4,10 @@ import {
   fetchAlbum,
   fetchAlbums,
   fetchCustomDiscCovers,
+  deleteCustomDiscCover,
   fetchDiscogsImages,
   proxyImageUrl,
+  saveCustomDiscCover,
   saveCustomDiscCovers,
   searchDiscogs,
   streamUrl,
@@ -71,12 +73,12 @@ const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEEDS = {
-  slow: { label: "Langzaam", seconds: 8 },
-  normal: { label: "Normaal", seconds: 2.8 },
+  slow: { label: "Langzaam", seconds: 18 },
+  normal: { label: "Normaal", seconds: 5 },
   fast: { label: "Snel", seconds: 1.4 }
 } as const;
 type DiscSpeed = keyof typeof DISC_SPEEDS;
-const APP_VERSION = "v0.3.7";
+const APP_VERSION = "v0.3.8";
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -211,6 +213,11 @@ export default function App() {
         const remote = await fetchCustomDiscCovers<Record<string, CustomDiscCover>>();
         const merged = { ...localParsed, ...(remote ?? {}) };
         setDiscCoverByAlbum(merged);
+        if (Object.keys(localParsed).length > 0) {
+          void saveCustomDiscCovers(merged).catch(() => {
+            // keep local fallback
+          });
+        }
       } catch {
         setDiscCoverByAlbum(localParsed);
       } finally {
@@ -223,9 +230,6 @@ export default function App() {
   useEffect(() => {
     if (!coversLoaded) return;
     localStorage.setItem(DISC_COVER_STORAGE_KEY, JSON.stringify(discCoverByAlbum));
-    void saveCustomDiscCovers(discCoverByAlbum).catch(() => {
-      // keep local fallback
-    });
   }, [discCoverByAlbum, coversLoaded]);
 
   useEffect(() => {
@@ -764,26 +768,34 @@ export default function App() {
 
   const saveEditorCover = () => {
     if (!selectedAlbum) return;
+    const albumId = selectedAlbum.id;
     const src = coverSourceInput.trim();
     if (!src) {
       setDiscCoverByAlbum((prev) => {
         const next = { ...prev };
-        delete next[selectedAlbum.id];
+        delete next[albumId];
         return next;
+      });
+      void deleteCustomDiscCover(albumId).catch((e) => {
+        setError(e instanceof Error ? e.message : "CD-cover verwijderen mislukt");
       });
       setCoverEditorOpen(false);
       return;
     }
+    const cover = {
+      source: src,
+      zoom: editorZoom,
+      x: editorX,
+      y: editorY,
+      rotate: editorRotate
+    };
     setDiscCoverByAlbum((prev) => ({
       ...prev,
-      [selectedAlbum.id]: {
-        source: src,
-        zoom: editorZoom,
-        x: editorX,
-        y: editorY,
-        rotate: editorRotate
-      }
+      [albumId]: cover
     }));
+    void saveCustomDiscCover(albumId, cover).catch((e) => {
+      setError(e instanceof Error ? e.message : "CD-cover opslaan mislukt");
+    });
     setCoverEditorOpen(false);
   };
 
