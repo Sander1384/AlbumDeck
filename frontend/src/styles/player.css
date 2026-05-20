@@ -363,6 +363,11 @@ body {
   background: rgba(164, 173, 255, 0.12);
 }
 
+.active-line {
+  background: rgba(164, 173, 255, 0.16);
+  color: #f5f7ff;
+}
+
 .theme-light .line-btn:hover {
   background: rgba(76, 93, 145, 0.13);
 }
@@ -391,6 +396,55 @@ body {
 .deck-transport .play-line svg {
   fill: currentColor;
   stroke: none;
+}
+
+.speed-control {
+  position: relative;
+  width: 36px;
+  height: 32px;
+}
+
+.speed-popover {
+  position: absolute;
+  left: 42px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(42vw, 220px);
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(10, 16, 33, 0.92);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+}
+
+.speed-slider {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(116, 143, 240, 0.3), #8aa4ff 55%, #f2f5ff);
+  outline: none;
+}
+
+.speed-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 0;
+  background: #f2f5ff;
+  box-shadow: 0 0 0 3px rgba(138, 164, 255, 0.24);
+}
+
+.speed-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 0;
+  background: #f2f5ff;
+  box-shadow: 0 0 0 3px rgba(138, 164, 255, 0.24);
 }
 
 .deck-middle {

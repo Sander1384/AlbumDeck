@@ -72,13 +72,21 @@ type CastWindow = Window & {
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
-const DISC_SPEEDS = {
-  slow: { label: "Langzaam", seconds: 18 },
-  normal: { label: "Normaal", seconds: 5 },
-  fast: { label: "Snel", seconds: 1.4 }
-} as const;
-type DiscSpeed = keyof typeof DISC_SPEEDS;
-const APP_VERSION = "v0.3.8";
+const DISC_SPEED_DEFAULT = 50;
+const APP_VERSION = "v0.3.9";
+
+function parseDiscSpeedValue(raw: string | null): number {
+  if (raw === "slow") return 25;
+  if (raw === "normal") return DISC_SPEED_DEFAULT;
+  if (raw === "fast") return 85;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : DISC_SPEED_DEFAULT;
+}
+
+function discSpinSeconds(speedValue: number): number {
+  if (speedValue <= 0) return 999;
+  return 0.35 + ((100 - speedValue) / 100) ** 2 * 17.65;
+}
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -138,14 +146,14 @@ export default function App() {
       return true;
     }
   });
-  const [discSpeed, setDiscSpeed] = useState<DiscSpeed>(() => {
+  const [discSpeed, setDiscSpeed] = useState<number>(() => {
     try {
-      const raw = localStorage.getItem(DISC_SPEED_STORAGE_KEY);
-      return raw === "slow" || raw === "normal" || raw === "fast" ? raw : "normal";
+      return parseDiscSpeedValue(localStorage.getItem(DISC_SPEED_STORAGE_KEY));
     } catch {
-      return "normal";
+      return DISC_SPEED_DEFAULT;
     }
   });
+  const [speedPanelOpen, setSpeedPanelOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCastReady, setIsCastReady] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
@@ -237,7 +245,7 @@ export default function App() {
   }, [loadSoundsEnabled]);
 
   useEffect(() => {
-    localStorage.setItem(DISC_SPEED_STORAGE_KEY, discSpeed);
+    localStorage.setItem(DISC_SPEED_STORAGE_KEY, String(discSpeed));
   }, [discSpeed]);
 
   const stopFadeTimer = () => {
@@ -722,14 +730,6 @@ export default function App() {
     }
   };
 
-  const cycleDiscSpeed = () => {
-    setDiscSpeed((current) => {
-      if (current === "normal") return "slow";
-      if (current === "slow") return "fast";
-      return "normal";
-    });
-  };
-
   const art = topCover?.src ?? currentCoverSrc ?? coverUrl(selectedAlbum?.coverArt);
   const discSource = currentCustomDisc ? resolveEditorPreviewSource(currentCustomDisc.source) : art;
   const discArtStyle = currentCustomDisc
@@ -889,10 +889,10 @@ export default function App() {
 
         <div className="stage-disc">
           <div
-            className={`disc ${!isPlaying && !isFastSpin && !isTrayClosing ? "paused" : ""} ${isFastSpin ? "fast" : ""} ${isTrayClosing ? "closing" : ""} ${topCover ? "" : "empty"} ${currentCustomDisc ? "custom-disc" : ""}`}
+            className={`disc ${(!isPlaying || discSpeed <= 0) && !isFastSpin && !isTrayClosing ? "paused" : ""} ${isFastSpin ? "fast" : ""} ${isTrayClosing ? "closing" : ""} ${topCover ? "" : "empty"} ${currentCustomDisc ? "custom-disc" : ""}`}
             style={{
               ["--tray-ms" as string]: `${trayMs}ms`,
-              ["--disc-spin" as string]: `${DISC_SPEEDS[discSpeed].seconds}s`
+              ["--disc-spin" as string]: `${discSpinSeconds(discSpeed)}s`
             }}
           >
             {topCover || selectedAlbum ? <img src={discSource} className="disc-album-art" style={discArtStyle} alt="" aria-hidden="true" /> : null}
@@ -916,14 +916,32 @@ export default function App() {
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <button className="line-btn ghost-line" onClick={() => setMenuOpen(true)} aria-label="Open album menu"><Icon name="menu" /></button>
             <button className="line-btn ghost-line" onClick={openCoverEditor} aria-label="Set CD cover">CD</button>
-            <button
-              className="line-btn ghost-line"
-              onClick={cycleDiscSpeed}
-              aria-label={`CD snelheid: ${DISC_SPEEDS[discSpeed].label}`}
-              title={`CD snelheid: ${DISC_SPEEDS[discSpeed].label}`}
-            >
-              <Icon name="speed" />
-            </button>
+            <div className="speed-control">
+              <button
+                className={`line-btn ghost-line ${speedPanelOpen ? "active-line" : ""}`}
+                onClick={() => setSpeedPanelOpen((open) => !open)}
+                aria-label="CD snelheid aanpassen"
+                aria-expanded={speedPanelOpen}
+                title="CD snelheid aanpassen"
+              >
+                <Icon name="speed" />
+              </button>
+              {speedPanelOpen ? (
+                <div className="speed-popover">
+                  <input
+                    className="speed-slider"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={discSpeed}
+                    onChange={(e) => setDiscSpeed(Number(e.target.value))}
+                    aria-label="CD draaisnelheid"
+                    title={`CD snelheid ${discSpeed}%`}
+                  />
+                </div>
+              ) : null}
+            </div>
             <button
               className={`line-btn ghost-line cast-btn ${isCasting ? "casting" : ""}`}
               onClick={() => void requestCastSession()}
