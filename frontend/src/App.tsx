@@ -36,7 +36,7 @@ function hashText(input: string): number {
   return Math.abs(h);
 }
 
-type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast";
+type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
@@ -48,6 +48,7 @@ function Icon({ name }: { name: IconName }) {
   if (name === "fullscreen") return <svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" /></svg>;
   if (name === "fullscreenExit") return <svg viewBox="0 0 24 24"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /></svg>;
   if (name === "cast") return <svg viewBox="0 0 24 24"><path d="M4 6h16v11H4zM4 18h.01M4 14a4 4 0 0 1 4 4M4 10a8 8 0 0 1 8 8" /></svg>;
+  if (name === "speed") return <svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 8 8M12 8v4l3 2M17 4h4v4" /></svg>;
   if (name === "pause") return <svg viewBox="0 0 24 24"><path d="M8 6h3v12H8zM13 6h3v12h-3z" /></svg>;
   return <svg viewBox="0 0 24 24"><path d="M8 6l10 6-10 6z" /></svg>;
 }
@@ -68,6 +69,13 @@ type CastWindow = Window & {
 
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
+const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
+const DISC_SPEEDS = {
+  slow: { label: "Langzaam", seconds: 8 },
+  normal: { label: "Normaal", seconds: 2.8 },
+  fast: { label: "Snel", seconds: 1.4 }
+} as const;
+type DiscSpeed = keyof typeof DISC_SPEEDS;
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -125,6 +133,14 @@ export default function App() {
       return raw === null ? true : raw === "true";
     } catch {
       return true;
+    }
+  });
+  const [discSpeed, setDiscSpeed] = useState<DiscSpeed>(() => {
+    try {
+      const raw = localStorage.getItem(DISC_SPEED_STORAGE_KEY);
+      return raw === "slow" || raw === "normal" || raw === "fast" ? raw : "normal";
+    } catch {
+      return "normal";
     }
   });
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -214,6 +230,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(LOAD_SOUNDS_STORAGE_KEY, String(loadSoundsEnabled));
   }, [loadSoundsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(DISC_SPEED_STORAGE_KEY, discSpeed);
+  }, [discSpeed]);
 
   const stopFadeTimer = () => {
     if (fadeTimerRef.current !== null) {
@@ -697,6 +717,14 @@ export default function App() {
     }
   };
 
+  const cycleDiscSpeed = () => {
+    setDiscSpeed((current) => {
+      if (current === "normal") return "slow";
+      if (current === "slow") return "fast";
+      return "normal";
+    });
+  };
+
   const art = topCover?.src ?? currentCoverSrc ?? coverUrl(selectedAlbum?.coverArt);
   const discSource = currentCustomDisc ? resolveEditorPreviewSource(currentCustomDisc.source) : art;
   const discArtStyle = currentCustomDisc
@@ -848,7 +876,10 @@ export default function App() {
         <div className="stage-disc">
           <div
             className={`disc ${!isPlaying && !isFastSpin && !isTrayClosing ? "paused" : ""} ${isFastSpin ? "fast" : ""} ${isTrayClosing ? "closing" : ""} ${topCover ? "" : "empty"} ${currentCustomDisc ? "custom-disc" : ""}`}
-            style={{ ["--tray-ms" as string]: `${trayMs}ms` }}
+            style={{
+              ["--tray-ms" as string]: `${trayMs}ms`,
+              ["--disc-spin" as string]: `${DISC_SPEEDS[discSpeed].seconds}s`
+            }}
           >
             {topCover || selectedAlbum ? <img src={discSource} className="disc-album-art" style={discArtStyle} alt="" aria-hidden="true" /> : null}
             {currentCustomDisc ? (
@@ -871,6 +902,14 @@ export default function App() {
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <button className="line-btn ghost-line" onClick={() => setMenuOpen(true)} aria-label="Open album menu"><Icon name="menu" /></button>
             <button className="line-btn ghost-line" onClick={openCoverEditor} aria-label="Set CD cover">CD</button>
+            <button
+              className="line-btn ghost-line"
+              onClick={cycleDiscSpeed}
+              aria-label={`CD snelheid: ${DISC_SPEEDS[discSpeed].label}`}
+              title={`CD snelheid: ${DISC_SPEEDS[discSpeed].label}`}
+            >
+              <Icon name="speed" />
+            </button>
             <button
               className={`line-btn ghost-line cast-btn ${isCasting ? "casting" : ""}`}
               onClick={() => void requestCastSession()}
