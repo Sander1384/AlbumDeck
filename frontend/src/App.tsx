@@ -73,7 +73,7 @@ const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 50;
-const APP_VERSION = "v0.3.9";
+const APP_VERSION = "v0.3.10";
 
 function parseDiscSpeedValue(raw: string | null): number {
   if (raw === "slow") return 25;
@@ -889,10 +889,11 @@ export default function App() {
 
         <div className="stage-disc">
           <div
-            className={`disc ${(!isPlaying || discSpeed <= 0) && !isFastSpin && !isTrayClosing ? "paused" : ""} ${isFastSpin ? "fast" : ""} ${isTrayClosing ? "closing" : ""} ${topCover ? "" : "empty"} ${currentCustomDisc ? "custom-disc" : ""}`}
+            className={`disc ${discSpeed <= 0 && !isFastSpin && !isTrayClosing ? "paused" : ""} ${isFastSpin ? "fast" : ""} ${isTrayClosing ? "closing" : ""} ${topCover ? "" : "empty"} ${currentCustomDisc ? "custom-disc" : ""}`}
             style={{
               ["--tray-ms" as string]: `${trayMs}ms`,
-              ["--disc-spin" as string]: `${discSpinSeconds(discSpeed)}s`
+              ["--disc-spin" as string]: `${discSpinSeconds(discSpeed)}s`,
+              animationDuration: `${discSpinSeconds(discSpeed)}s`
             }}
           >
             {topCover || selectedAlbum ? <img src={discSource} className="disc-album-art" style={discArtStyle} alt="" aria-hidden="true" /> : null}
@@ -927,7 +928,7 @@ export default function App() {
                 <Icon name="speed" />
               </button>
               {speedPanelOpen ? (
-                <div className="speed-popover">
+                <div className="speed-popover" onClick={(e) => e.stopPropagation()}>
                   <input
                     className="speed-slider"
                     type="range"
@@ -936,6 +937,7 @@ export default function App() {
                     step={1}
                     value={discSpeed}
                     onChange={(e) => setDiscSpeed(Number(e.target.value))}
+                    onInput={(e) => setDiscSpeed(Number((e.target as HTMLInputElement).value))}
                     aria-label="CD draaisnelheid"
                     title={`CD snelheid ${discSpeed}%`}
                   />

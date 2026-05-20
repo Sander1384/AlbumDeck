@@ -406,25 +406,31 @@ body {
 
 .speed-popover {
   position: absolute;
-  left: 42px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: min(42vw, 220px);
-  height: 34px;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  width: 34px;
+  height: min(34vh, 220px);
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: 0 10px;
   border-radius: 8px;
   background: rgba(10, 16, 33, 0.92);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
+  touch-action: none;
 }
 
 .speed-slider {
-  appearance: none;
-  width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(116, 143, 240, 0.3), #8aa4ff 55%, #f2f5ff);
+  appearance: slider-vertical;
+  -webkit-appearance: slider-vertical;
+  width: 24px;
+  height: calc(100% - 18px);
+  writing-mode: vertical-rl;
+  direction: rtl;
+  touch-action: none;
+  accent-color: #8aa4ff;
+  background: transparent;
   outline: none;
 }
 
