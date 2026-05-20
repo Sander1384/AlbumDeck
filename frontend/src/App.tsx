@@ -408,8 +408,13 @@ export default function App() {
 
   const requestCastSession = async () => {
     const win = window as CastWindow;
+    if (!window.isSecureContext) {
+      setError("Cast werkt niet vanaf HTTP. Open AlbumDeck via HTTPS op een hostnaam die je Chromecast ook kan bereiken.");
+      return;
+    }
+
     if (!win.cast?.framework || !win.chrome?.cast) {
-      setError("Cast is niet beschikbaar. Gebruik Chrome/Chromium via HTTPS en hetzelfde netwerk als je Chromecast.");
+      setError("Cast is niet beschikbaar in deze browser. Gebruik Chrome/Chromium, HTTPS en hetzelfde netwerk als je Chromecast.");
       return;
     }
 

@@ -56,7 +56,7 @@ Deploy via:
 Then open:
 - `http://<NAS-IP>:8080`
 
-By default this stack is pinned to `v0.3.2`.
+By default this stack is pinned to `v0.3.3`.
 If you prefer rolling updates, change image tag to `latest`.
 
 ## Local Build Mode
@@ -80,8 +80,8 @@ This builds the unified root [`Dockerfile`](./Dockerfile).
 Release flow:
 
 ```bash
-git tag v0.3.2
-git push origin v0.3.2
+git tag v0.3.3
+git push origin v0.3.3
 ```
 
 ## Release Checklist (Important)
@@ -109,7 +109,8 @@ Set `DISCOGS_TOKEN` in your environment or Portainer stack.
 
 ### Chromecast button cannot connect
 
-Use Chrome/Chromium and open AlbumDeck through a URL your Chromecast can reach, such as your NAS IP or HTTPS hostname.
+Use Chrome/Chromium and open AlbumDeck through HTTPS on a hostname your Chromecast can reach.
+Google Cast Web Sender does not reliably initialize from `http://<NAS-IP>:8080`.
 Do not cast from `localhost`, because the Chromecast will try to load that URL on itself.
 
 ### TLS certificate error
