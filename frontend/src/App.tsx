@@ -76,6 +76,7 @@ const DISC_SPEEDS = {
   fast: { label: "Snel", seconds: 1.4 }
 } as const;
 type DiscSpeed = keyof typeof DISC_SPEEDS;
+const APP_VERSION = "v0.3.7";
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -835,6 +836,7 @@ export default function App() {
       />
       <audio ref={doorRef} src="/door.mp3" preload="auto" />
       <audio ref={spinRef} src="/draai.mp3" preload="auto" />
+      <div className="build-badge" aria-label={`AlbumDeck versie ${APP_VERSION}`}>{APP_VERSION}</div>
 
       <section className="stage">
         <div className="stage-cover">
