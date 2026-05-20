@@ -72,16 +72,8 @@ type CastWindow = Window & {
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
-const DISC_SPEED_DEFAULT = 50;
-const APP_VERSION = "v0.3.10";
-
-function parseDiscSpeedValue(raw: string | null): number {
-  if (raw === "slow") return 25;
-  if (raw === "normal") return DISC_SPEED_DEFAULT;
-  if (raw === "fast") return 85;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : DISC_SPEED_DEFAULT;
-}
+const DISC_SPEED_DEFAULT = 100;
+const APP_VERSION = "v0.3.11";
 
 function discSpinSeconds(speedValue: number): number {
   if (speedValue <= 0) return 999;
@@ -146,13 +138,7 @@ export default function App() {
       return true;
     }
   });
-  const [discSpeed, setDiscSpeed] = useState<number>(() => {
-    try {
-      return parseDiscSpeedValue(localStorage.getItem(DISC_SPEED_STORAGE_KEY));
-    } catch {
-      return DISC_SPEED_DEFAULT;
-    }
-  });
+  const [discSpeed, setDiscSpeed] = useState<number>(DISC_SPEED_DEFAULT);
   const [speedPanelOpen, setSpeedPanelOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCastReady, setIsCastReady] = useState(false);
@@ -245,8 +231,8 @@ export default function App() {
   }, [loadSoundsEnabled]);
 
   useEffect(() => {
-    localStorage.setItem(DISC_SPEED_STORAGE_KEY, String(discSpeed));
-  }, [discSpeed]);
+    localStorage.removeItem(DISC_SPEED_STORAGE_KEY);
+  }, []);
 
   const stopFadeTimer = () => {
     if (fadeTimerRef.current !== null) {
