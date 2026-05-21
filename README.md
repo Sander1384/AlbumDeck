@@ -56,7 +56,7 @@ Deploy via:
 Then open:
 - `http://<NAS-IP>:8080`
 
-By default this stack is pinned to `v0.3.12`.
+By default this stack is pinned to `v0.3.13`.
 If you prefer rolling updates, change image tag to `latest`.
 
 ## Local Build Mode
@@ -80,8 +80,8 @@ This builds the unified root [`Dockerfile`](./Dockerfile).
 Release flow:
 
 ```bash
-git tag v0.3.12
-git push origin v0.3.12
+git tag v0.3.13
+git push origin v0.3.13
 ```
 
 ## Release Checklist (Important)
