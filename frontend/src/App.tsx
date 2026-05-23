@@ -73,7 +73,7 @@ const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.13";
+const APP_VERSION = "v0.3.14";
 
 function discSpinSeconds(speedValue: number): number {
   if (speedValue <= 0) return 999;
@@ -718,6 +718,7 @@ export default function App() {
   };
 
   const art = topCover?.src ?? currentCoverSrc ?? coverUrl(selectedAlbum?.coverArt);
+  const hasDiscArt = Boolean(topCover || selectedAlbum);
   const discSource = currentCustomDisc ? resolveEditorPreviewSource(currentCustomDisc.source) : art;
   const discArtStyle = currentCustomDisc
     ? {
@@ -876,13 +877,13 @@ export default function App() {
 
         <div className="stage-disc">
           <div
-            className={`disc ${discSpeed <= 0 && !isFastSpin && !isTrayClosing ? "paused" : ""} ${isFastSpin ? "fast" : ""} ${isTrayClosing ? "closing" : ""} ${topCover ? "" : "empty"} ${currentCustomDisc ? "custom-disc" : ""}`}
+            className={`disc ${(!hasDiscArt || discSpeed <= 0) && !isFastSpin && !isTrayClosing ? "paused" : ""} ${isFastSpin ? "fast" : ""} ${isTrayClosing ? "closing" : ""} ${hasDiscArt ? "" : "empty"} ${currentCustomDisc ? "custom-disc" : ""}`}
             style={{
               ["--tray-ms" as string]: `${trayMs}ms`,
               ["--disc-spin" as string]: `${discSpinSeconds(discSpeed)}s`
             }}
           >
-            {topCover || selectedAlbum ? <img src={discSource} className="disc-album-art" style={discArtStyle} alt="" aria-hidden="true" /> : null}
+            {hasDiscArt ? <img src={discSource} className="disc-album-art" style={discArtStyle} alt="" aria-hidden="true" /> : null}
             {currentCustomDisc ? (
               <div className="disc-hub-mask" aria-hidden="true">
                 <span className="disc-hub-ring" />

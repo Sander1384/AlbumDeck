@@ -267,7 +267,7 @@ app.get("/api/image-proxy", async (req, res) => {
     const response = await axios.get<ArrayBuffer>(target.toString(), {
       responseType: "arraybuffer",
       timeout: 20000,
-      headers: { "user-agent": "navidrome-cd-player/1.0" }
+      headers: { "user-agent": "AlbumDeck/1.0" }
     });
 
     const contentTypeHeader = response.headers["content-type"];
@@ -456,5 +456,5 @@ if (fsSync.existsSync(STATIC_INDEX)) {
 }
 
 app.listen(PORT, () => {
-  console.log(`Navidrome CD backend listening on :${PORT}`);
+  console.log(`AlbumDeck backend listening on :${PORT}`);
 });

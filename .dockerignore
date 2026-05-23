@@ -1,6 +1,7 @@
 .git
 .github
 .agents
+.n8nac
 .backup
 node_modules
 **/node_modules
@@ -10,4 +11,4 @@ node_modules
 npm-debug.log*
 **/npm-debug.log*
 frontend/tsconfig.tsbuildinfo
-navidrome-cd-player-plan.md
+RELEASE_HANDOVER.md

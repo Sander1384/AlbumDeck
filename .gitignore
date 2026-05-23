@@ -8,9 +8,11 @@ dist/
 backend/.data/
 
 .backup/
+RELEASE_HANDOVER.md
 
 *.log
 npm-debug.log*
+*.tsbuildinfo
 
 .DS_Store
 Thumbs.db
