@@ -73,7 +73,7 @@ const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.16";
+const APP_VERSION = "v0.3.15";
 
 function discSpinSeconds(speedValue: number): number {
   if (speedValue <= 0) return 999;
@@ -130,7 +130,6 @@ export default function App() {
   const [topCover, setTopCover] = useState<{ src: string; angle: number; key: string } | null>(null);
   const [lowerCover, setLowerCover] = useState<{ src: string; angle: number; fading: boolean; key: string } | null>(null);
   const [isCoverInsert, setIsCoverInsert] = useState(false);
-  const [isCoverBackVisible, setIsCoverBackVisible] = useState(false);
   const [loadSoundsEnabled, setLoadSoundsEnabled] = useState<boolean>(() => {
     try {
       const raw = localStorage.getItem(LOAD_SOUNDS_STORAGE_KEY);
@@ -190,7 +189,6 @@ export default function App() {
   useEffect(() => {
     setIsTopArtReady(false);
     setIsTopCaseReady(false);
-    setIsCoverBackVisible(false);
   }, [topCover?.key, currentCoverSrc, selectedAlbum?.id]);
 
   useEffect(() => {
@@ -721,7 +719,6 @@ export default function App() {
 
   const art = topCover?.src ?? currentCoverSrc ?? coverUrl(selectedAlbum?.coverArt);
   const hasDiscArt = Boolean(topCover || selectedAlbum);
-  const displayCoverSrc = topCover?.src ?? currentCoverSrc ?? (selectedAlbum ? coverUrl(selectedAlbum.coverArt) : null);
   const discSource = currentCustomDisc ? resolveEditorPreviewSource(currentCustomDisc.source) : art;
   const discArtStyle = currentCustomDisc
     ? {
@@ -843,20 +840,7 @@ export default function App() {
 
       <section className="stage">
         <div className="stage-cover">
-          <div
-            className={`jewel-case ${isCoverBackVisible ? "show-back" : ""}`}
-            role={selectedAlbum ? "button" : undefined}
-            tabIndex={selectedAlbum ? 0 : undefined}
-            aria-label={selectedAlbum ? "Toon voor- of achterkant van de hoes" : undefined}
-            onClick={() => selectedAlbum && setIsCoverBackVisible((visible) => !visible)}
-            onKeyDown={(e) => {
-              if (!selectedAlbum) return;
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setIsCoverBackVisible((visible) => !visible);
-              }
-            }}
-          >
+          <div className="jewel-case">
             {lowerCover ? (
               <div
                 key={lowerCover.key}
@@ -867,29 +851,19 @@ export default function App() {
                 <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" />
               </div>
             ) : null}
-            {displayCoverSrc && selectedAlbum ? (
-              <div className={`case-flip ${isCoverInsert ? "insert" : ""}`} style={{ ["--tilt" as string]: `${topCover?.angle ?? 0}deg`, visibility: isTopLayerReady ? "visible" : "hidden" }}>
-                <div className="case-face case-front">
-                  <img src={displayCoverSrc} className="stack-art" alt={selectedAlbum.name} onLoad={() => setIsTopArtReady(true)} />
-                  <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" onLoad={() => setIsTopCaseReady(true)} />
-                </div>
-                <div className="case-face case-back" aria-hidden={!isCoverBackVisible}>
-                  <img src={displayCoverSrc} className="case-back-ghost" alt="" aria-hidden="true" />
-                  <div className="case-back-panel">
-                    <div className="case-back-heading">
-                      <strong>{selectedAlbum.name}</strong>
-                      <span>{selectedAlbum.artist ?? ""}</span>
-                    </div>
-                    <ol className="case-back-tracks">
-                      {tracks.slice(0, 12).map((song, idx) => (
-                        <li key={song.id}>
-                          <span>{String(idx + 1).padStart(2, "0")}</span>
-                          {cleanTrackTitle(song.title) || `Track ${idx + 1}`}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
+            {topCover ? (
+              <div
+                key={topCover.key}
+                className={`stack-card stack-top ${isCoverInsert ? "insert" : ""}`}
+                style={{ ["--tilt" as string]: `${topCover.angle}deg`, visibility: isTopLayerReady ? "visible" : "hidden" }}
+              >
+                <img src={topCover.src} className="stack-art" alt={selectedAlbum?.name ?? "Album cover"} onLoad={() => setIsTopArtReady(true)} />
+                <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" onLoad={() => setIsTopCaseReady(true)} />
               </div>
+            ) : selectedAlbum ? (
+              <div className="stack-card stack-top" style={{ ["--tilt" as string]: "0deg", visibility: isTopLayerReady ? "visible" : "hidden" }}>
+                <img src={currentCoverSrc ?? coverUrl(selectedAlbum.coverArt)} className="stack-art" alt={selectedAlbum.name} onLoad={() => setIsTopArtReady(true)} />
+                <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" onLoad={() => setIsTopCaseReady(true)} />
               </div>
             ) : (
               <div className="cover-empty" aria-label="No album selected">
