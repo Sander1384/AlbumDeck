@@ -73,7 +73,7 @@ const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.14";
+const APP_VERSION = "v0.3.15";
 
 function discSpinSeconds(speedValue: number): number {
   if (speedValue <= 0) return 999;
