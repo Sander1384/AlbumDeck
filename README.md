@@ -11,8 +11,8 @@ AlbumDeck is a kiosk-friendly CD-style web player for Navidrome. It shows a larg
 - Browse and play albums from Navidrome through the Subsonic API.
 - Large tablet/kiosk layout with album sleeve, CD visual, vertical controls, fullscreen button, and seek bar.
 - Adjustable visual CD spin speed. The empty CD stays still; loading animation and loading sound keep their own timing.
-- Optional Discogs search for custom CD artwork.
-- Persistent custom CD artwork in `/app/.data/custom-disc-covers.json`.
+- Optional Discogs search for custom CD and sleeve-back artwork.
+- Persistent custom artwork in `/app/.data/custom-disc-covers.json`.
 - Optional Google Cast sender support in Chrome/Chromium over HTTPS.
 
 ## Quick Start
@@ -52,7 +52,7 @@ Before deploying, set:
 The Portainer example is pinned to:
 
 ```text
-ghcr.io/sander1384/albumdeck:v0.3.20
+ghcr.io/sander1384/albumdeck:v0.3.21
 ```
 
 After deploying, open:
@@ -129,13 +129,13 @@ Tags:
 
 - `latest` and `main` are published from the `main` branch.
 - `vX.Y.Z` tags publish versioned images.
-- The compose examples are pinned to `v0.3.20` so new deployments do not accidentally pull an older cached image.
+- The compose examples are pinned to `v0.3.21` so new deployments do not accidentally pull an older cached image.
 
 ## Privacy Notes
 
 AlbumDeck does not require secrets in the frontend build. Keep credentials in `.env`, Portainer environment variables, or your Docker secret management. Do not commit `.env` or `.data`.
 
-The backend hashes Navidrome credentials for Subsonic API calls and proxies streams/covers server-side. Custom CD cover mappings may contain external image URLs or data URLs, so treat `/app/.data` as personal library metadata.
+The backend hashes Navidrome credentials for Subsonic API calls and proxies streams/covers server-side. Custom artwork mappings may contain external image URLs or data URLs, so treat `/app/.data` as personal library metadata.
 
 ## Troubleshooting
 

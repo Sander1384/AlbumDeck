@@ -38,7 +38,7 @@ function hashText(input: string): number {
   return Math.abs(h);
 }
 
-type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed";
+type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
@@ -51,6 +51,7 @@ function Icon({ name }: { name: IconName }) {
   if (name === "fullscreenExit") return <svg viewBox="0 0 24 24"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /></svg>;
   if (name === "cast") return <svg viewBox="0 0 24 24"><path d="M4 6h16v11H4zM4 18h.01M4 14a4 4 0 0 1 4 4M4 10a8 8 0 0 1 8 8" /></svg>;
   if (name === "speed") return <svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 8 8M12 8v4l3 2M17 4h4v4" /></svg>;
+  if (name === "image") return <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 15l3-3 2 2 2-3 3 4M8.5 8.5h.01" /></svg>;
   if (name === "pause") return <svg viewBox="0 0 24 24"><path d="M8 6h3v12H8zM13 6h3v12h-3z" /></svg>;
   return <svg viewBox="0 0 24 24"><path d="M8 6l10 6-10 6z" /></svg>;
 }
@@ -77,7 +78,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.20";
+const APP_VERSION = "v0.3.21";
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -302,11 +303,11 @@ export default function App() {
       const timeout = window.setTimeout(() => {
         img.onload = null;
         img.onerror = null;
-        reject(new Error("Cover laden duurde te lang"));
+        reject(new Error("Cover loading timed out"));
       }, 10000);
       img.onerror = () => {
         window.clearTimeout(timeout);
-        reject(new Error("Kon cover niet laden"));
+        reject(new Error("Could not load cover"));
       };
       img.onload = () => {
         window.clearTimeout(timeout);
@@ -463,7 +464,7 @@ export default function App() {
     const isRemotePlaying = media.playerState === win.chrome.cast.media.PlayerState.PLAYING;
     await new Promise<void>((resolve, reject) => {
       const done = () => resolve();
-      const fail = (err: unknown) => reject(err instanceof Error ? err : new Error("Cast bediening mislukt"));
+      const fail = (err: unknown) => reject(err instanceof Error ? err : new Error("Cast control failed"));
       if (isRemotePlaying) media.pause(null, done, fail);
       else media.play(null, done, fail);
     });
@@ -473,12 +474,12 @@ export default function App() {
   const requestCastSession = async () => {
     const win = window as CastWindow;
     if (!window.isSecureContext) {
-      setError("Cast werkt niet vanaf HTTP. Open AlbumDeck via HTTPS op een hostnaam die je Chromecast ook kan bereiken.");
+      setError("Cast does not work over HTTP. Open AlbumDeck over HTTPS on a hostname your Chromecast can also reach.");
       return;
     }
 
     if (!win.cast?.framework || !win.chrome?.cast) {
-      setError("Cast is niet beschikbaar in deze browser. Gebruik Chrome/Chromium, HTTPS en hetzelfde netwerk als je Chromecast.");
+      setError("Cast is not available in this browser. Use Chrome/Chromium, HTTPS, and the same network as your Chromecast.");
       return;
     }
 
@@ -494,7 +495,7 @@ export default function App() {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e ?? "");
       if (!message.includes("cancel")) {
-        setError(message || "Cast starten mislukt");
+        setError(message || "Could not start Cast");
       }
     }
   };
@@ -616,7 +617,7 @@ export default function App() {
         setIsTrayClosing(false);
         setIsFastSpin(false);
         setIsCoverInsert(false);
-        setError(e instanceof Error ? e.message : "Kon album niet openen");
+        setError(e instanceof Error ? e.message : "Could not open album");
       }
     }
   };
@@ -627,7 +628,7 @@ export default function App() {
         const loaded = await fetchAlbums();
         setAlbums(loaded);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Kon albums niet laden");
+        setError(e instanceof Error ? e.message : "Could not load albums");
       }
     };
     load();
@@ -684,7 +685,7 @@ export default function App() {
         if (active) {
           audioRef.current?.pause();
           const song = currentTrackRef.current;
-          if (song) void loadCastMedia(song).catch((e) => setError(e instanceof Error ? e.message : "Cast laden mislukt"));
+          if (song) void loadCastMedia(song).catch((e) => setError(e instanceof Error ? e.message : "Could not load Cast media"));
         }
       });
     };
@@ -758,7 +759,7 @@ export default function App() {
       }
       await document.documentElement.requestFullscreen();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fullscreen niet beschikbaar");
+      setError(e instanceof Error ? e.message : "Fullscreen is not available");
     }
   };
 
@@ -833,7 +834,7 @@ export default function App() {
         return next;
       });
       void deleteCustomDiscCover(coverEditorMode === "back" ? backCoverKey(albumId) : albumId).catch((e) => {
-        setError(e instanceof Error ? e.message : "Cover verwijderen mislukt");
+        setError(e instanceof Error ? e.message : "Could not remove cover");
       });
       setCoverEditorOpen(false);
       return;
@@ -851,7 +852,7 @@ export default function App() {
       [albumId]: cover
     }));
     void saveCustomDiscCover(coverEditorMode === "back" ? backCoverKey(albumId) : albumId, cover).catch((e) => {
-      setError(e instanceof Error ? e.message : "Cover opslaan mislukt");
+      setError(e instanceof Error ? e.message : "Could not save cover");
     });
     setCoverEditorOpen(false);
   };
@@ -867,10 +868,10 @@ export default function App() {
       if (images.length > 0) {
         setCoverSourceInput(images[0]);
       } else {
-        setEditorError("Geen afbeeldingen gevonden op deze Discogs pagina.");
+        setEditorError("No images found on this Discogs page.");
       }
     } catch (e) {
-      setEditorError(e instanceof Error ? e.message : "Discogs lookup mislukt");
+      setEditorError(e instanceof Error ? e.message : "Discogs lookup failed");
     } finally {
       setDiscogsLoading(false);
     }
@@ -885,10 +886,10 @@ export default function App() {
       const results = await searchDiscogs(q);
       setDiscogsResults(results);
       if (!results.length) {
-        setEditorError("Geen Discogs resultaten gevonden.");
+        setEditorError("No Discogs results found.");
       }
     } catch (e) {
-      setEditorError(e instanceof Error ? e.message : "Discogs zoeken mislukt");
+      setEditorError(e instanceof Error ? e.message : "Discogs search failed");
     } finally {
       setDiscogsLoading(false);
     }
@@ -905,7 +906,7 @@ export default function App() {
       />
       <audio ref={doorRef} src="/door.mp3" preload="auto" />
       <audio ref={spinRef} src="/draai.mp3" preload="auto" />
-      <div className="build-badge" aria-label={`AlbumDeck versie ${APP_VERSION}`}>{APP_VERSION}</div>
+      <div className="build-badge" aria-label={`AlbumDeck version ${APP_VERSION}`}>{APP_VERSION}</div>
 
       <section className="stage">
         <div className="stage-cover">
@@ -913,7 +914,7 @@ export default function App() {
             className={`jewel-case ${isCoverBackVisible ? "show-back" : ""}`}
             role={selectedAlbum ? "button" : undefined}
             tabIndex={selectedAlbum ? 0 : undefined}
-            aria-label={selectedAlbum ? "Toon voor- of achterkant van de hoes" : undefined}
+            aria-label={selectedAlbum ? "Show the front or back of the sleeve" : undefined}
             onClick={() => selectedAlbum && setIsCoverBackVisible((visible) => !visible)}
             onKeyDown={(e) => {
               if (!selectedAlbum) return;
@@ -964,7 +965,7 @@ export default function App() {
             ) : (
               <div className="cover-empty" aria-label="No album selected">
                 <div className="empty-brand">
-                  <span>Kies een album in het menu</span>
+                  <span>Choose an album from the menu</span>
                 </div>
               </div>
             )}
@@ -998,15 +999,15 @@ export default function App() {
             <button className="line-btn" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
             <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
-            <button className="line-btn ghost-line" onClick={() => setMenuOpen(true)} aria-label="Open album menu"><Icon name="menu" /></button>
-            <button className="line-btn ghost-line" onClick={() => openCoverEditor()} aria-label="Set CD cover">CD</button>
+            <button className="line-btn ghost-line text-line" onClick={() => setMenuOpen(true)} aria-label="Open CD rack">CD</button>
+            <button className="line-btn ghost-line" onClick={() => openCoverEditor()} aria-label="Set artwork"><Icon name="image" /></button>
             <div className="speed-control">
               <button
                 className={`line-btn ghost-line ${speedPanelOpen ? "active-line" : ""}`}
                 onClick={() => setSpeedPanelOpen((open) => !open)}
-                aria-label="CD snelheid aanpassen"
+                aria-label="Adjust CD spin speed"
                 aria-expanded={speedPanelOpen}
-                title="CD snelheid aanpassen"
+                title="Adjust CD spin speed"
               >
                 <Icon name="speed" />
               </button>
@@ -1021,8 +1022,8 @@ export default function App() {
                     value={discSpeed}
                     onChange={(e) => setDiscSpeed(Number(e.target.value))}
                     onInput={(e) => setDiscSpeed(Number((e.target as HTMLInputElement).value))}
-                    aria-label="CD draaisnelheid"
-                    title={`CD snelheid ${discSpeed}%`}
+                    aria-label="CD spin speed"
+                    title={`CD speed ${discSpeed}%`}
                   />
                 </div>
               ) : null}
@@ -1030,8 +1031,8 @@ export default function App() {
             <button
               className={`line-btn ghost-line cast-btn ${isCasting ? "casting" : ""}`}
               onClick={() => void requestCastSession()}
-              aria-label="Cast naar Chromecast"
-              title={isCastReady ? "Cast naar Chromecast" : "Cast niet beschikbaar"}
+              aria-label="Cast to Chromecast"
+              title={isCastReady ? "Cast to Chromecast" : "Cast not available"}
             >
               <Icon name="cast" />
             </button>
@@ -1039,7 +1040,7 @@ export default function App() {
               className="line-btn ghost-line"
               onClick={() => setLoadSoundsEnabled((v) => !v)}
               aria-label={loadSoundsEnabled ? "Disable load sounds" : "Enable load sounds"}
-              title={loadSoundsEnabled ? "Laadgeluiden aan" : "Laadgeluiden uit"}
+              title={loadSoundsEnabled ? "Load sounds on" : "Load sounds off"}
             >
               <Icon name={loadSoundsEnabled ? "sound" : "soundOff"} />
             </button>
@@ -1047,7 +1048,7 @@ export default function App() {
               className="line-btn ghost-line"
               onClick={() => void toggleFullscreen()}
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              title={isFullscreen ? "Volledig scherm uit" : "Volledig scherm"}
+              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
               <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} />
             </button>
@@ -1089,7 +1090,7 @@ export default function App() {
               <button onClick={() => setMenuOpen(false)} aria-label="Close menu"><Icon name="close" /></button>
             </div>
             <div className="rack-shell">
-              <aside className="rack-alpha" aria-label="Filter op artiestletter">
+              <aside className="rack-alpha" aria-label="Filter by artist letter">
                 {artistLetters.map((letter) => (
                   <button
                     key={letter}
@@ -1122,7 +1123,7 @@ export default function App() {
         <div className="menu-overlay" role="dialog" aria-modal="true">
           <div className="menu-panel cd-editor-panel">
             <div className="menu-head">
-              <h2>{coverEditorMode === "back" ? "Achterkant hoes instellen" : "CD Cover instellen"}: {selectedAlbum.name}</h2>
+              <h2>{coverEditorMode === "back" ? "Set sleeve back" : "Set CD artwork"}: {selectedAlbum.name}</h2>
               <button onClick={() => setCoverEditorOpen(false)} aria-label="Close editor"><Icon name="close" /></button>
             </div>
             <div className="cd-editor-grid">
@@ -1142,19 +1143,19 @@ export default function App() {
                     aria-selected={coverEditorMode === "back"}
                     onClick={() => switchCoverEditorMode("back")}
                   >
-                    Achterkant
+                    Back
                   </button>
                 </div>
-                <label>Zoek album op Discogs</label>
+                <label>Search Discogs album</label>
                 <div className="cd-input-row">
                   <input
                     className="cd-input"
                     value={discogsQuery}
                     onChange={(e) => setDiscogsQuery(e.target.value)}
-                    placeholder="Bijv. Blink-182 Enema Of The State"
+                    placeholder="Example: Blink-182 Enema Of The State"
                   />
                   <button className="line-btn" onClick={() => void lookupDiscogsByQuery()} disabled={discogsLoading}>
-                    {discogsLoading ? "..." : "Zoek album"}
+                    {discogsLoading ? "..." : "Search album"}
                   </button>
                 </div>
                 {discogsResults.length > 0 ? (
@@ -1187,10 +1188,10 @@ export default function App() {
                     placeholder="https://www.discogs.com/..."
                   />
                   <button className="line-btn" onClick={() => void lookupDiscogsImages()} disabled={discogsLoading}>
-                    {discogsLoading ? "..." : "Zoek"}
+                    {discogsLoading ? "..." : "Search"}
                   </button>
                 </div>
-                <label>Of upload bestand</label>
+                <label>Or upload a file</label>
                 <input
                   className="cd-input"
                   type="file"
@@ -1205,7 +1206,7 @@ export default function App() {
                 />
                 {discogsCandidates.length > 0 ? (
                   <>
-                    <label>Kies afbeelding ({discogsCandidates.length})</label>
+                    <label>Choose image ({discogsCandidates.length})</label>
                     <div className="discogs-grid">
                       {discogsCandidates.map((img) => (
                         <button
@@ -1213,7 +1214,7 @@ export default function App() {
                           className={`discogs-item ${coverSourceInput === img ? "active" : ""}`}
                           onClick={() => setCoverSourceInput(img)}
                         >
-                          <img src={proxyImageUrl(img)} alt="Discogs kandidaat" />
+                          <img src={proxyImageUrl(img)} alt="Discogs candidate" />
                         </button>
                       ))}
                     </div>
@@ -1226,7 +1227,7 @@ export default function App() {
                 <input className="slider" type="range" min={-220} max={220} step={1} value={editorX} onChange={(e) => setEditorX(Number(e.target.value))} />
                 <label>Y: {editorY}px</label>
                 <input className="slider" type="range" min={-220} max={220} step={1} value={editorY} onChange={(e) => setEditorY(Number(e.target.value))} />
-                <label>Rotatie: {editorRotate}°</label>
+                <label>Rotation: {editorRotate} degrees</label>
                 <input className="slider" type="range" min={-180} max={180} step={1} value={editorRotate} onChange={(e) => setEditorRotate(Number(e.target.value))} />
                 <div className="cd-editor-actions">
                   <button className="line-btn ghost-line" onClick={() => {
@@ -1236,7 +1237,7 @@ export default function App() {
                     setEditorY(0);
                     setEditorRotate(0);
                   }}>Reset</button>
-                  <button className="line-btn play-line" onClick={saveEditorCover}>Opslaan</button>
+                  <button className="line-btn play-line" onClick={saveEditorCover}>Save</button>
                 </div>
               </div>
               <div className="cd-editor-preview">
@@ -1249,7 +1250,7 @@ export default function App() {
                           src={resolveEditorPreviewSource(coverSourceInput)}
                           className="back-cover-inlay"
                           style={{ transform: `translate(${editorX}px, ${editorY}px) scale(${editorZoom}) rotate(${editorRotate}deg)` }}
-                          alt="Achterkant preview"
+                          alt="Back cover preview"
                         />
                       </div>
                       <div className="back-center-guides" aria-hidden="true">
