@@ -78,7 +78,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.23";
+const APP_VERSION = "v0.3.24";
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -120,6 +120,8 @@ export default function App() {
   const playTokenRef = useRef(0);
   const normalizedCoverCacheRef = useRef<Map<string, string>>(new Map());
   const castSessionRef = useRef<any>(null);
+  const castOptionsReadyRef = useRef(false);
+  const castListenerAttachedRef = useRef(false);
   const isCastingRef = useRef(false);
   const currentTrackRef = useRef<Song | undefined>(undefined);
   const selectedAlbumRef = useRef<Album | null>(null);
@@ -478,7 +480,11 @@ export default function App() {
     }
 
     try {
-      const context = win.cast.framework.CastContext.getInstance();
+      const context = configureCastContext(win);
+      if (!context) {
+        setError("Cast is not ready yet. Wait a moment and try again.");
+        return;
+      }
       const session = context.getCurrentSession() ?? await context.requestSession();
       castSessionRef.current = session;
       setIsCasting(Boolean(session));
@@ -652,13 +658,10 @@ export default function App() {
     const initializeCast = (isAvailable: boolean) => {
       if (disposed || !isAvailable || !win.cast?.framework || !win.chrome?.cast) return;
 
-      const context = win.cast.framework.CastContext.getInstance();
-      context.setOptions({
-        receiverApplicationId: win.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-        autoJoinPolicy: win.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-      });
+      const context = configureCastContext(win);
+      if (!context || castListenerAttachedRef.current) return;
+      castListenerAttachedRef.current = true;
 
-      setIsCastReady(true);
       castSessionRef.current = context.getCurrentSession();
       setIsCasting(Boolean(castSessionRef.current));
 
@@ -690,6 +693,20 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function configureCastContext(win: CastWindow) {
+    if (!win.cast?.framework || !win.chrome?.cast) return null;
+    const context = win.cast.framework.CastContext.getInstance();
+    if (!castOptionsReadyRef.current) {
+      context.setOptions({
+        receiverApplicationId: win.chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: win.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+      });
+      castOptionsReadyRef.current = true;
+      setIsCastReady(true);
+    }
+    return context;
+  }
 
   const togglePlay = async () => {
     if (isCastingRef.current) {
