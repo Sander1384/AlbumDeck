@@ -333,7 +333,7 @@ app.get("/api/discogs-search", async (req, res) => {
       return;
     }
 
-    type DiscogsSearchResult = { title: string; url: string; images?: string[]; formats?: string[]; score: number; order: number };
+    type DiscogsSearchResult = { title: string; artist?: string; url: string; images?: string[]; formats?: string[]; score: number; order: number };
     const results: DiscogsSearchResult[] = [];
     const seen = new Set<string>();
     let order = 0;
@@ -352,10 +352,21 @@ app.get("/api/discogs-search", async (req, res) => {
       return score;
     };
 
-    const pushResult = (title: string, url: string, images?: string[], formats: string[] = []) => {
+    const splitDiscogsTitle = (rawTitle: string) => {
+      const cleaned = rawTitle.replace(/\s+/g, " ").trim();
+      const parts = cleaned.split(/\s+-\s+/);
+      if (parts.length < 2) return { title: cleaned };
+      return {
+        artist: parts[0].trim(),
+        title: parts.slice(1).join(" - ").trim()
+      };
+    };
+
+    const pushResult = (rawTitle: string, url: string, images?: string[], formats: string[] = []) => {
+      const { artist, title } = splitDiscogsTitle(rawTitle);
       if (seen.has(url)) return;
       seen.add(url);
-      results.push({ title, url, images, formats, score: formatScore(formats), order: order++ });
+      results.push({ title, artist, url, images, formats, score: formatScore(formats), order: order++ });
     };
 
     const fetchDiscogsSearch = async (params: Record<string, string | number>) => {
@@ -399,8 +410,6 @@ app.get("/api/discogs-search", async (req, res) => {
         const title = m[2].replace(/\s+/g, " ").trim();
         if (!title) continue;
         const url = `https://www.discogs.com${rel.split("?")[0]}`;
-        if (seen.has(url)) continue;
-        seen.add(url);
         pushResult(title, url);
         if (results.length >= 20) break;
       }

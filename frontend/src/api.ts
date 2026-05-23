@@ -15,6 +15,7 @@ export type Song = {
 
 export type DiscogsResult = {
   title: string;
+  artist?: string;
   url: string;
   images?: string[];
   formats?: string[];

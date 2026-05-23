@@ -1,6 +1,6 @@
 services:
   albumdeck:
-    image: ghcr.io/sander1384/albumdeck:v0.3.25
+    image: ghcr.io/sander1384/albumdeck:v0.3.26
     container_name: albumdeck
     env_file:
       - .env
