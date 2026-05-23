@@ -1016,12 +1016,16 @@ body {
 
   .stage {
     grid-template-columns: 1fr;
-    gap: 20px;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
     padding: 16px;
+    align-items: center;
   }
 
-  .jewel-case, .disc { width: min(92vw, 560px); }
-  .jewel-case { width: min(92vw, 560px); }
+  .jewel-case,
+  .disc {
+    width: min(calc(100vw - 76px), calc((100dvh - 114px) / 2), 560px);
+  }
 
   .player-bar {
     gap: 8px;
@@ -1048,12 +1052,20 @@ body {
 @media (max-width: 640px) and (orientation: portrait) {
   .app-shell {
     padding: 8px;
+    padding-left: 48px;
+    padding-bottom: 42px;
     gap: 8px;
   }
 
   .stage {
     padding: 10px;
     border-radius: 14px;
+    gap: 10px;
+  }
+
+  .jewel-case,
+  .disc {
+    width: min(calc(100vw - 64px), calc((100dvh - 94px) / 2), 480px);
   }
 
   .line-btn {

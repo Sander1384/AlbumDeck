@@ -1,6 +1,6 @@
 services:
   albumdeck:
-    image: ghcr.io/sander1384/albumdeck:v0.3.22
+    image: ghcr.io/sander1384/albumdeck:v0.3.23
     container_name: albumdeck
     restart: unless-stopped
     environment:

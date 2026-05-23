@@ -78,7 +78,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.22";
+const APP_VERSION = "v0.3.23";
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -140,10 +140,7 @@ export default function App() {
   const [isDiscFlipped, setIsDiscFlipped] = useState(false);
   const [trayMs, setTrayMs] = useState(4000);
   const [currentCoverSrc, setCurrentCoverSrc] = useState<string | null>(null);
-  const [isCaseOverlayReady, setIsCaseOverlayReady] = useState(false);
   const [caseOverlaySrc, setCaseOverlaySrc] = useState("/CDALBUM.webp");
-  const [isTopArtReady, setIsTopArtReady] = useState(false);
-  const [isTopCaseReady, setIsTopCaseReady] = useState(false);
   const [trackListAnim, setTrackListAnim] = useState<"up" | "down" | "">("");
   const [discCoverByAlbum, setDiscCoverByAlbum] = useState<Record<string, CustomDiscCover>>({});
   const [backCoverByAlbum, setBackCoverByAlbum] = useState<Record<string, CustomDiscCover>>({});
@@ -189,7 +186,6 @@ export default function App() {
     const start = Math.max(0, Math.min(trackIndex - 2, tracks.length - maxVisible));
     return tracks.slice(start, start + maxVisible).map((song, idx) => ({ song, absoluteIndex: start + idx }));
   }, [tracks, trackIndex]);
-  const isTopLayerReady = isCaseOverlayReady && isTopArtReady && isTopCaseReady;
   const currentCustomDisc = selectedAlbum ? discCoverByAlbum[selectedAlbum.id] : undefined;
   const artistLetters = useMemo(() => {
     const letters = new Set<string>();
@@ -221,8 +217,6 @@ export default function App() {
   }, [currentTrack, currentCoverSrc, isCasting, selectedAlbum]);
 
   useEffect(() => {
-    setIsTopArtReady(false);
-    setIsTopCaseReady(false);
     setIsCoverBackVisible(false);
   }, [topCover?.key, currentCoverSrc, selectedAlbum?.id]);
 
@@ -639,13 +633,8 @@ export default function App() {
       spinRef.current.load();
     }
     const overlay = new Image();
-    overlay.onload = () => setIsCaseOverlayReady(true);
     overlay.onerror = () => {
       setCaseOverlaySrc("/CDHOES4.png");
-      const fallback = new Image();
-      fallback.onload = () => setIsCaseOverlayReady(true);
-      fallback.onerror = () => setIsCaseOverlayReady(true);
-      fallback.src = "/CDHOES4.png";
     };
     overlay.src = "/CDALBUM.webp";
 
@@ -938,12 +927,12 @@ export default function App() {
               <div
                 key={topCover?.key ?? selectedAlbum.id}
                 className={`stack-card stack-top ${isCoverInsert ? "insert" : ""}`}
-                style={{ ["--tilt" as string]: `${topCover?.angle ?? 0}deg`, visibility: isTopLayerReady ? "visible" : "hidden" }}
+                style={{ ["--tilt" as string]: `${topCover?.angle ?? 0}deg` }}
               >
                 <div className="cover-flip-inner">
                   <div className="cover-face cover-face-front">
-                    <img src={displayCoverSrc} className="stack-art" alt={selectedAlbum.name} onLoad={() => setIsTopArtReady(true)} />
-                    <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" onLoad={() => setIsTopCaseReady(true)} />
+                    <img src={displayCoverSrc} className="stack-art" alt={selectedAlbum.name} />
+                    <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" />
                   </div>
                   <div className="cover-face cover-face-back" aria-hidden={!isCoverBackVisible}>
                     <div className="back-cover-frame">
