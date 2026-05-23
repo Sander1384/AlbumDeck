@@ -106,6 +106,9 @@ body {
   overflow: visible;
   line-height: normal;
   perspective: 1400px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 .jewel-case[role="button"] {
@@ -115,6 +118,10 @@ body {
 .jewel-case:focus-visible {
   outline: 2px solid rgba(138, 164, 255, 0.9);
   outline-offset: 8px;
+}
+
+.jewel-case:active {
+  outline: 0;
 }
 
 .cover-flip-inner {

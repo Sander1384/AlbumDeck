@@ -17,6 +17,7 @@ export type DiscogsResult = {
   title: string;
   url: string;
   images?: string[];
+  formats?: string[];
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";

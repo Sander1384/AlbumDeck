@@ -333,16 +333,38 @@ app.get("/api/discogs-search", async (req, res) => {
       return;
     }
 
-    const results: Array<{ title: string; url: string; images?: string[] }> = [];
+    type DiscogsSearchResult = { title: string; url: string; images?: string[]; formats?: string[]; score: number; order: number };
+    const results: DiscogsSearchResult[] = [];
     const seen = new Set<string>();
+    let order = 0;
 
-    try {
+    const formatScore = (formats: string[]) => {
+      const joined = formats.join(" ").toLowerCase();
+      let score = 0;
+      if (/\b(cd|cdr|cd-r|sacd|hdcd)\b/.test(joined)) score += 120;
+      if (/enhanced|multimedia/.test(joined)) score += 12;
+      if (/album/.test(joined)) score += 8;
+      if (/\b(lp|vinyl|12\"|10\"|7\")\b/.test(joined)) score -= 90;
+      if (/cassette|tape|reel/.test(joined)) score -= 55;
+      if (/file|mp3|flac|aac|download/.test(joined)) score -= 45;
+      if (/dvd|blu-ray|vhs/.test(joined)) score -= 35;
+      if (/single|ep|promo|sampler/.test(joined)) score -= 12;
+      return score;
+    };
+
+    const pushResult = (title: string, url: string, images?: string[], formats: string[] = []) => {
+      if (seen.has(url)) return;
+      seen.add(url);
+      results.push({ title, url, images, formats, score: formatScore(formats), order: order++ });
+    };
+
+    const fetchDiscogsSearch = async (params: Record<string, string | number>) => {
       const response = await axios.get<{
-        results?: Array<{ title?: string; uri?: string; type?: string; cover_image?: string; thumb?: string }>;
+        results?: Array<{ title?: string; uri?: string; type?: string; cover_image?: string; thumb?: string; format?: string[] }>;
       }>("https://api.discogs.com/database/search", {
         timeout: 20000,
         headers: discogsHeaders(),
-        params: { q, type: "release", per_page: 20, page: 1 }
+        params
       });
 
       for (const item of response.data.results ?? []) {
@@ -350,10 +372,13 @@ app.get("/api/discogs-search", async (req, res) => {
         const title = item.title?.replace(/\s+/g, " ").trim();
         if (!rel || !title) continue;
         const url = rel.startsWith("http") ? rel : `https://www.discogs.com${rel}`;
-        if (seen.has(url)) continue;
-        seen.add(url);
-        results.push({ title, url, images: compactDiscogsImages([item.cover_image, item.thumb]) });
+        pushResult(title, url, compactDiscogsImages([item.cover_image, item.thumb]), item.format ?? []);
       }
+    };
+
+    try {
+      await fetchDiscogsSearch({ q, type: "release", format: "CD", per_page: 20, page: 1 });
+      await fetchDiscogsSearch({ q, type: "release", per_page: 30, page: 1 });
     } catch {
       // Fall back to the public HTML page when the API is unavailable.
     }
@@ -376,12 +401,13 @@ app.get("/api/discogs-search", async (req, res) => {
         const url = `https://www.discogs.com${rel.split("?")[0]}`;
         if (seen.has(url)) continue;
         seen.add(url);
-        results.push({ title, url });
+        pushResult(title, url);
         if (results.length >= 20) break;
       }
     }
 
-    res.json({ results });
+    results.sort((a, b) => b.score - a.score || a.order - b.order);
+    res.json({ results: results.slice(0, 30).map(({ score: _score, order: _order, ...result }) => result) });
   } catch (error) {
     res.status(502).json({ error: error instanceof Error ? error.message : "Discogs search failed" });
   }
