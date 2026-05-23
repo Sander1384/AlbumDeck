@@ -63,6 +63,8 @@ type CustomDiscCover = {
   rotate: number;
 };
 
+type CoverEditorMode = "disc" | "back";
+
 type CastWindow = Window & {
   __onGCastApiAvailable?: (isAvailable: boolean) => void;
   cast?: any;
@@ -70,10 +72,38 @@ type CastWindow = Window & {
 };
 
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
+const BACK_COVER_STORAGE_KEY = "albumdeck-custom-back-covers-v1";
+const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.15";
+const APP_VERSION = "v0.3.17";
+
+function backCoverKey(albumId: string): string {
+  return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
+}
+
+function splitCoverMaps(covers: Record<string, CustomDiscCover>) {
+  const disc: Record<string, CustomDiscCover> = {};
+  const back: Record<string, CustomDiscCover> = {};
+  Object.entries(covers).forEach(([key, value]) => {
+    if (!value?.source) return;
+    if (key.startsWith(BACK_COVER_REMOTE_PREFIX)) {
+      back[key.slice(BACK_COVER_REMOTE_PREFIX.length)] = value;
+    } else {
+      disc[key] = value;
+    }
+  });
+  return { disc, back };
+}
+
+function joinCoverMaps(disc: Record<string, CustomDiscCover>, back: Record<string, CustomDiscCover>) {
+  const merged: Record<string, CustomDiscCover> = { ...disc };
+  Object.entries(back).forEach(([albumId, value]) => {
+    merged[backCoverKey(albumId)] = value;
+  });
+  return merged;
+}
 
 function discSpinSeconds(speedValue: number): number {
   if (speedValue <= 0) return 999;
@@ -115,7 +145,9 @@ export default function App() {
   const [isTopCaseReady, setIsTopCaseReady] = useState(false);
   const [trackListAnim, setTrackListAnim] = useState<"up" | "down" | "">("");
   const [discCoverByAlbum, setDiscCoverByAlbum] = useState<Record<string, CustomDiscCover>>({});
+  const [backCoverByAlbum, setBackCoverByAlbum] = useState<Record<string, CustomDiscCover>>({});
   const [coverEditorOpen, setCoverEditorOpen] = useState(false);
+  const [coverEditorMode, setCoverEditorMode] = useState<CoverEditorMode>("disc");
   const [coverSourceInput, setCoverSourceInput] = useState("");
   const [editorZoom, setEditorZoom] = useState(1);
   const [editorX, setEditorX] = useState(0);
@@ -130,6 +162,7 @@ export default function App() {
   const [topCover, setTopCover] = useState<{ src: string; angle: number; key: string } | null>(null);
   const [lowerCover, setLowerCover] = useState<{ src: string; angle: number; fading: boolean; key: string } | null>(null);
   const [isCoverInsert, setIsCoverInsert] = useState(false);
+  const [isCoverBackVisible, setIsCoverBackVisible] = useState(false);
   const [loadSoundsEnabled, setLoadSoundsEnabled] = useState<boolean>(() => {
     try {
       const raw = localStorage.getItem(LOAD_SOUNDS_STORAGE_KEY);
@@ -189,31 +222,42 @@ export default function App() {
   useEffect(() => {
     setIsTopArtReady(false);
     setIsTopCaseReady(false);
+    setIsCoverBackVisible(false);
   }, [topCover?.key, currentCoverSrc, selectedAlbum?.id]);
 
   useEffect(() => {
     const loadCovers = async () => {
-      let localParsed: Record<string, CustomDiscCover> = {};
+      let localDisc: Record<string, CustomDiscCover> = {};
+      let localBack: Record<string, CustomDiscCover> = {};
       try {
         const raw = localStorage.getItem(DISC_COVER_STORAGE_KEY);
         if (raw) {
-          localParsed = JSON.parse(raw) as Record<string, CustomDiscCover>;
+          localDisc = JSON.parse(raw) as Record<string, CustomDiscCover>;
+        }
+        const backRaw = localStorage.getItem(BACK_COVER_STORAGE_KEY);
+        if (backRaw) {
+          localBack = JSON.parse(backRaw) as Record<string, CustomDiscCover>;
         }
       } catch {
-        localParsed = {};
+        localDisc = {};
+        localBack = {};
       }
 
       try {
         const remote = await fetchCustomDiscCovers<Record<string, CustomDiscCover>>();
-        const merged = { ...localParsed, ...(remote ?? {}) };
-        setDiscCoverByAlbum(merged);
-        if (Object.keys(localParsed).length > 0) {
-          void saveCustomDiscCovers(merged).catch(() => {
+        const remoteSplit = splitCoverMaps(remote ?? {});
+        const mergedDisc = { ...localDisc, ...remoteSplit.disc };
+        const mergedBack = { ...localBack, ...remoteSplit.back };
+        setDiscCoverByAlbum(mergedDisc);
+        setBackCoverByAlbum(mergedBack);
+        if (Object.keys(localDisc).length > 0 || Object.keys(localBack).length > 0) {
+          void saveCustomDiscCovers(joinCoverMaps(mergedDisc, mergedBack)).catch(() => {
             // keep local fallback
           });
         }
       } catch {
-        setDiscCoverByAlbum(localParsed);
+        setDiscCoverByAlbum(localDisc);
+        setBackCoverByAlbum(localBack);
       } finally {
         setCoversLoaded(true);
       }
@@ -224,7 +268,8 @@ export default function App() {
   useEffect(() => {
     if (!coversLoaded) return;
     localStorage.setItem(DISC_COVER_STORAGE_KEY, JSON.stringify(discCoverByAlbum));
-  }, [discCoverByAlbum, coversLoaded]);
+    localStorage.setItem(BACK_COVER_STORAGE_KEY, JSON.stringify(backCoverByAlbum));
+  }, [discCoverByAlbum, backCoverByAlbum, coversLoaded]);
 
   useEffect(() => {
     localStorage.setItem(LOAD_SOUNDS_STORAGE_KEY, String(loadSoundsEnabled));
@@ -719,6 +764,14 @@ export default function App() {
 
   const art = topCover?.src ?? currentCoverSrc ?? coverUrl(selectedAlbum?.coverArt);
   const hasDiscArt = Boolean(topCover || selectedAlbum);
+  const currentCustomBack = selectedAlbum ? backCoverByAlbum[selectedAlbum.id] : undefined;
+  const displayCoverSrc = topCover?.src ?? currentCoverSrc ?? (selectedAlbum ? coverUrl(selectedAlbum.coverArt) : null);
+  const backImageSource = currentCustomBack ? resolveEditorPreviewSource(currentCustomBack.source) : displayCoverSrc;
+  const backImageStyle = currentCustomBack
+    ? {
+        transform: `translate(${currentCustomBack.x}px, ${currentCustomBack.y}px) scale(${currentCustomBack.zoom}) rotate(${currentCustomBack.rotate}deg)`
+      }
+    : undefined;
   const discSource = currentCustomDisc ? resolveEditorPreviewSource(currentCustomDisc.source) : art;
   const discArtStyle = currentCustomDisc
     ? {
@@ -726,9 +779,10 @@ export default function App() {
       }
     : undefined;
 
-  const openCoverEditor = () => {
+  const openCoverEditor = (mode: CoverEditorMode = "disc") => {
     if (!selectedAlbum) return;
-    const c = discCoverByAlbum[selectedAlbum.id];
+    const c = mode === "back" ? backCoverByAlbum[selectedAlbum.id] : discCoverByAlbum[selectedAlbum.id];
+    setCoverEditorMode(mode);
     setCoverSourceInput(c?.source ?? "");
     setEditorZoom(c?.zoom ?? 1);
     setEditorX(c?.x ?? 0);
@@ -739,6 +793,19 @@ export default function App() {
     setDiscogsResults([]);
     setEditorError(null);
     setCoverEditorOpen(true);
+  };
+
+  const switchCoverEditorMode = (mode: CoverEditorMode) => {
+    if (!selectedAlbum || mode === coverEditorMode) return;
+    const c = mode === "back" ? backCoverByAlbum[selectedAlbum.id] : discCoverByAlbum[selectedAlbum.id];
+    setCoverEditorMode(mode);
+    setCoverSourceInput(c?.source ?? "");
+    setEditorZoom(c?.zoom ?? 1);
+    setEditorX(c?.x ?? 0);
+    setEditorY(c?.y ?? 0);
+    setEditorRotate(c?.rotate ?? 0);
+    setDiscogsCandidates([]);
+    setEditorError(null);
   };
 
   function resolveEditorPreviewSource(source: string) {
@@ -759,13 +826,14 @@ export default function App() {
     const albumId = selectedAlbum.id;
     const src = coverSourceInput.trim();
     if (!src) {
-      setDiscCoverByAlbum((prev) => {
+      const setter = coverEditorMode === "back" ? setBackCoverByAlbum : setDiscCoverByAlbum;
+      setter((prev) => {
         const next = { ...prev };
         delete next[albumId];
         return next;
       });
-      void deleteCustomDiscCover(albumId).catch((e) => {
-        setError(e instanceof Error ? e.message : "CD-cover verwijderen mislukt");
+      void deleteCustomDiscCover(coverEditorMode === "back" ? backCoverKey(albumId) : albumId).catch((e) => {
+        setError(e instanceof Error ? e.message : "Cover verwijderen mislukt");
       });
       setCoverEditorOpen(false);
       return;
@@ -777,12 +845,13 @@ export default function App() {
       y: editorY,
       rotate: editorRotate
     };
-    setDiscCoverByAlbum((prev) => ({
+    const setter = coverEditorMode === "back" ? setBackCoverByAlbum : setDiscCoverByAlbum;
+    setter((prev) => ({
       ...prev,
       [albumId]: cover
     }));
-    void saveCustomDiscCover(albumId, cover).catch((e) => {
-      setError(e instanceof Error ? e.message : "CD-cover opslaan mislukt");
+    void saveCustomDiscCover(coverEditorMode === "back" ? backCoverKey(albumId) : albumId, cover).catch((e) => {
+      setError(e instanceof Error ? e.message : "Cover opslaan mislukt");
     });
     setCoverEditorOpen(false);
   };
@@ -840,7 +909,20 @@ export default function App() {
 
       <section className="stage">
         <div className="stage-cover">
-          <div className="jewel-case">
+          <div
+            className={`jewel-case ${isCoverBackVisible ? "show-back" : ""}`}
+            role={selectedAlbum ? "button" : undefined}
+            tabIndex={selectedAlbum ? 0 : undefined}
+            aria-label={selectedAlbum ? "Toon voor- of achterkant van de hoes" : undefined}
+            onClick={() => selectedAlbum && setIsCoverBackVisible((visible) => !visible)}
+            onKeyDown={(e) => {
+              if (!selectedAlbum) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setIsCoverBackVisible((visible) => !visible);
+              }
+            }}
+          >
             {lowerCover ? (
               <div
                 key={lowerCover.key}
@@ -851,19 +933,33 @@ export default function App() {
                 <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" />
               </div>
             ) : null}
-            {topCover ? (
+            {displayCoverSrc && selectedAlbum ? (
               <div
-                key={topCover.key}
+                key={topCover?.key ?? selectedAlbum.id}
                 className={`stack-card stack-top ${isCoverInsert ? "insert" : ""}`}
-                style={{ ["--tilt" as string]: `${topCover.angle}deg`, visibility: isTopLayerReady ? "visible" : "hidden" }}
+                style={{ ["--tilt" as string]: `${topCover?.angle ?? 0}deg`, visibility: isTopLayerReady ? "visible" : "hidden" }}
               >
-                <img src={topCover.src} className="stack-art" alt={selectedAlbum?.name ?? "Album cover"} onLoad={() => setIsTopArtReady(true)} />
-                <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" onLoad={() => setIsTopCaseReady(true)} />
-              </div>
-            ) : selectedAlbum ? (
-              <div className="stack-card stack-top" style={{ ["--tilt" as string]: "0deg", visibility: isTopLayerReady ? "visible" : "hidden" }}>
-                <img src={currentCoverSrc ?? coverUrl(selectedAlbum.coverArt)} className="stack-art" alt={selectedAlbum.name} onLoad={() => setIsTopArtReady(true)} />
-                <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" onLoad={() => setIsTopCaseReady(true)} />
+                <div className="cover-flip-inner">
+                  <div className="cover-face cover-face-front">
+                    <img src={displayCoverSrc} className="stack-art" alt={selectedAlbum.name} onLoad={() => setIsTopArtReady(true)} />
+                    <img src={caseOverlaySrc} className="stack-case-overlay" alt="" aria-hidden="true" onLoad={() => setIsTopCaseReady(true)} />
+                  </div>
+                  <div className="cover-face cover-face-back" aria-hidden={!isCoverBackVisible}>
+                    <div className="back-cover-frame">
+                      <img src="/backcover.png" className="back-cover-template" alt="" aria-hidden="true" />
+                      <div className="back-cover-inlay-window" aria-hidden="true">
+                        {backImageSource ? (
+                          <img
+                            src={backImageSource}
+                            className="back-cover-inlay"
+                            style={backImageStyle}
+                            alt=""
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="cover-empty" aria-label="No album selected">
@@ -903,7 +999,7 @@ export default function App() {
             <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <button className="line-btn ghost-line" onClick={() => setMenuOpen(true)} aria-label="Open album menu"><Icon name="menu" /></button>
-            <button className="line-btn ghost-line" onClick={openCoverEditor} aria-label="Set CD cover">CD</button>
+            <button className="line-btn ghost-line" onClick={() => openCoverEditor()} aria-label="Set CD cover">CD</button>
             <div className="speed-control">
               <button
                 className={`line-btn ghost-line ${speedPanelOpen ? "active-line" : ""}`}
@@ -1026,11 +1122,29 @@ export default function App() {
         <div className="menu-overlay" role="dialog" aria-modal="true">
           <div className="menu-panel cd-editor-panel">
             <div className="menu-head">
-              <h2>CD Cover Instellen: {selectedAlbum.name}</h2>
+              <h2>{coverEditorMode === "back" ? "Achterkant hoes instellen" : "CD Cover instellen"}: {selectedAlbum.name}</h2>
               <button onClick={() => setCoverEditorOpen(false)} aria-label="Close editor"><Icon name="close" /></button>
             </div>
             <div className="cd-editor-grid">
               <div className="cd-editor-controls">
+                <div className="cover-mode-tabs" role="tablist" aria-label="Cover type">
+                  <button
+                    className={coverEditorMode === "disc" ? "active" : ""}
+                    role="tab"
+                    aria-selected={coverEditorMode === "disc"}
+                    onClick={() => switchCoverEditorMode("disc")}
+                  >
+                    CD
+                  </button>
+                  <button
+                    className={coverEditorMode === "back" ? "active" : ""}
+                    role="tab"
+                    aria-selected={coverEditorMode === "back"}
+                    onClick={() => switchCoverEditorMode("back")}
+                  >
+                    Achterkant
+                  </button>
+                </div>
                 <label>Zoek album op Discogs</label>
                 <div className="cd-input-row">
                   <input
@@ -1126,22 +1240,42 @@ export default function App() {
                 </div>
               </div>
               <div className="cd-editor-preview">
-                <div className="disc paused">
-                  <img
-                    src={resolveEditorPreviewSource(coverSourceInput)}
-                    className="disc-album-art"
-                    style={{ transform: `translate(${editorX}px, ${editorY}px) scale(${editorZoom}) rotate(${editorRotate}deg)` }}
-                    alt="CD preview"
-                  />
-                  <div className="cd-center-guides" aria-hidden="true">
-                    <span className="guide-h" />
-                    <span className="guide-v" />
-                    <span className="guide-ring" />
-                    <span className="guide-hole" />
+                {coverEditorMode === "back" ? (
+                  <div className="back-cover-preview">
+                    <div className="back-cover-frame">
+                      <img src="/backcover.png" className="back-cover-template" alt="" aria-hidden="true" />
+                      <div className="back-cover-inlay-window">
+                        <img
+                          src={resolveEditorPreviewSource(coverSourceInput)}
+                          className="back-cover-inlay"
+                          style={{ transform: `translate(${editorX}px, ${editorY}px) scale(${editorZoom}) rotate(${editorRotate}deg)` }}
+                          alt="Achterkant preview"
+                        />
+                      </div>
+                      <div className="back-center-guides" aria-hidden="true">
+                        <span className="guide-h" />
+                        <span className="guide-v" />
+                      </div>
+                    </div>
                   </div>
-                  <img src="/rand.png" className="disc-center-overlay preview-overlay" alt="" aria-hidden="true" />
-                  <img src="/rand2.png" className="disc-center-overlay overlay-top fade-in preview-overlay" alt="" aria-hidden="true" />
-                </div>
+                ) : (
+                  <div className="disc paused">
+                    <img
+                      src={resolveEditorPreviewSource(coverSourceInput)}
+                      className="disc-album-art"
+                      style={{ transform: `translate(${editorX}px, ${editorY}px) scale(${editorZoom}) rotate(${editorRotate}deg)` }}
+                      alt="CD preview"
+                    />
+                    <div className="cd-center-guides" aria-hidden="true">
+                      <span className="guide-h" />
+                      <span className="guide-v" />
+                      <span className="guide-ring" />
+                      <span className="guide-hole" />
+                    </div>
+                    <img src="/rand.png" className="disc-center-overlay preview-overlay" alt="" aria-hidden="true" />
+                    <img src="/rand2.png" className="disc-center-overlay overlay-top fade-in preview-overlay" alt="" aria-hidden="true" />
+                  </div>
+                )}
               </div>
             </div>
           </div>

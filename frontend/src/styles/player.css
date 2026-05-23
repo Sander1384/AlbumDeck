@@ -102,6 +102,78 @@ body {
   box-shadow: none;
   overflow: visible;
   line-height: normal;
+  perspective: 1400px;
+}
+
+.jewel-case[role="button"] {
+  cursor: pointer;
+}
+
+.jewel-case:focus-visible {
+  outline: 2px solid rgba(138, 164, 255, 0.9);
+  outline-offset: 8px;
+}
+
+.cover-flip-inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 640ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.jewel-case.show-back .cover-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.cover-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+.cover-face-front {
+  transform: rotateY(0deg);
+}
+
+.cover-face-back {
+  transform: rotateY(180deg);
+  display: grid;
+  place-items: center;
+}
+
+.back-cover-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2280 / 2008;
+  overflow: hidden;
+}
+
+.back-cover-template {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.back-cover-inlay-window {
+  position: absolute;
+  left: 7.5%;
+  top: 8.5%;
+  z-index: 3;
+  width: 85%;
+  height: 83%;
+  overflow: hidden;
+}
+
+.back-cover-inlay {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center center;
 }
 
 .stack-card {
@@ -690,6 +762,31 @@ body {
   gap: 8px;
 }
 
+.cover-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cover-mode-tabs button {
+  border: 0;
+  border-radius: 6px;
+  min-height: 34px;
+  color: #b9c7ee;
+  background: transparent;
+  cursor: pointer;
+}
+
+.cover-mode-tabs button.active {
+  color: #f5f8ff;
+  background: rgba(138, 164, 255, 0.22);
+}
+
 .cd-editor-controls label {
   font-size: 0.88rem;
   color: #c9d5f7;
@@ -733,6 +830,10 @@ body {
   width: min(36vw, 380px);
 }
 
+.back-cover-preview {
+  width: min(36vw, 430px);
+}
+
 .editor-error {
   margin: 0;
   color: #ffb0bd;
@@ -742,6 +843,13 @@ body {
 .cd-center-guides {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+.back-center-guides {
+  position: absolute;
+  inset: 8.5% 7.5% 8.5% 7.5%;
+  z-index: 3;
   pointer-events: none;
 }
 
