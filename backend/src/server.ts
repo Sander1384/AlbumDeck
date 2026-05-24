@@ -237,32 +237,50 @@ app.get("/api/cover/:coverId", async (req, res) => {
 app.get("/api/stream/:songId", async (req, res) => {
   try {
     const streamUrl = subsonicStreamUrl(navidromeConfig, req.params.songId);
-    const range = typeof req.headers.range === "string" ? req.headers.range : undefined;
-    const response = await axios.get(streamUrl, {
-      responseType: "stream",
-      headers: range ? { range } : undefined,
-      validateStatus: (status) => status >= 200 && status < 300
-    });
-
-    const contentTypeHeader = response.headers["content-type"];
-    const contentType = typeof contentTypeHeader === "string" ? contentTypeHeader : "audio/mpeg";
-    const contentLength = response.headers["content-length"];
-    const contentRange = response.headers["content-range"];
-    const acceptRanges = response.headers["accept-ranges"];
-
-    if (response.status === 206) {
-      res.status(206);
-    }
-    res.setHeader("content-type", contentType);
-    res.setHeader("accept-ranges", typeof acceptRanges === "string" ? acceptRanges : "bytes");
-    if (typeof contentLength === "string") res.setHeader("content-length", contentLength);
-    if (typeof contentRange === "string") res.setHeader("content-range", contentRange);
-    res.setHeader("cache-control", "no-store");
-    response.data.pipe(res);
+    await pipeNavidromeStream(req, res, streamUrl);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Stream failed" });
   }
 });
+
+app.get("/api/cast-stream/:songId", async (req, res) => {
+  try {
+    const streamUrl = subsonicStreamUrl(navidromeConfig, req.params.songId, { format: "mp3", maxBitRate: 320 });
+    await pipeNavidromeStream(req, res, streamUrl, "audio/mpeg");
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Cast stream failed" });
+  }
+});
+
+async function pipeNavidromeStream(
+  req: express.Request,
+  res: express.Response,
+  streamUrl: string,
+  fallbackContentType = "audio/mpeg"
+) {
+  const range = typeof req.headers.range === "string" ? req.headers.range : undefined;
+  const response = await axios.get(streamUrl, {
+    responseType: "stream",
+    headers: range ? { range } : undefined,
+    validateStatus: (status) => status >= 200 && status < 300
+  });
+
+  const contentTypeHeader = response.headers["content-type"];
+  const contentType = typeof contentTypeHeader === "string" ? contentTypeHeader : fallbackContentType;
+  const contentLength = response.headers["content-length"];
+  const contentRange = response.headers["content-range"];
+  const acceptRanges = response.headers["accept-ranges"];
+
+  if (response.status === 206) {
+    res.status(206);
+  }
+  res.setHeader("content-type", contentType);
+  res.setHeader("accept-ranges", typeof acceptRanges === "string" ? acceptRanges : "bytes");
+  if (typeof contentLength === "string") res.setHeader("content-length", contentLength);
+  if (typeof contentRange === "string") res.setHeader("content-range", contentRange);
+  res.setHeader("cache-control", "no-store");
+  response.data.pipe(res);
+}
 
 app.get("/api/image-proxy", async (req, res) => {
   try {

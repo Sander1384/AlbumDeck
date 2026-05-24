@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  castStreamUrl,
   coverUrl,
   fetchAlbum,
   fetchAlbums,
@@ -91,7 +92,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.27";
+const APP_VERSION = "v0.3.28";
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -442,25 +443,21 @@ export default function App() {
     if (!session || !win.chrome?.cast) return false;
 
     const album = selectedAlbumRef.current;
-    const mediaInfo = new win.chrome.cast.media.MediaInfo(absoluteUrl(streamUrl(song.id)), "audio/mpeg");
+    const mediaInfo = new win.chrome.cast.media.MediaInfo(absoluteUrl(castStreamUrl(song.id)), "audio/mpeg");
     mediaInfo.streamType = win.chrome.cast.media.StreamType.BUFFERED;
-    if (song.duration) mediaInfo.duration = song.duration;
+    if (Number.isFinite(song.duration) && song.duration && song.duration > 0) mediaInfo.duration = song.duration;
 
     const metadata = new win.chrome.cast.media.MusicTrackMediaMetadata();
     metadata.title = cleanTrackTitle(song.title) || song.title || "AlbumDeck";
     metadata.artist = song.artist ?? album?.artist ?? "";
     metadata.albumName = album?.name ?? "";
 
-    const imageSrc = currentCoverSrcRef.current ?? coverUrl(album?.coverArt);
-    if (imageSrc) {
-      metadata.images = [new win.chrome.cast.Image(absoluteUrl(imageSrc))];
-    }
-
     mediaInfo.metadata = metadata;
 
     const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
     request.autoplay = true;
-    await session.loadMedia(request);
+    const errorCode = await session.loadMedia(request);
+    if (errorCode) throw new Error(String(errorCode));
     setIsPlaying(true);
     return true;
   };

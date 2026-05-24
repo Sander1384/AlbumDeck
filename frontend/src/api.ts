@@ -56,7 +56,11 @@ export function coverUrl(coverId?: string): string {
 }
 
 export function streamUrl(songId: string): string {
-  return `${API_BASE}/stream/${songId}`;
+  return `${API_BASE}/stream/${encodeURIComponent(songId)}`;
+}
+
+export function castStreamUrl(songId: string): string {
+  return `${API_BASE}/cast-stream/${encodeURIComponent(songId)}`;
 }
 
 export function proxyImageUrl(url: string): string {

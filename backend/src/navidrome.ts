@@ -119,10 +119,12 @@ export function subsonicCoverUrl(cfg: NavidromeConfig, coverId: string, size?: n
   return `${cfg.navidromeUrl}/rest/getCoverArt.view?${params.toString()}`;
 }
 
-export function subsonicStreamUrl(cfg: NavidromeConfig, songId: string): string {
+export function subsonicStreamUrl(cfg: NavidromeConfig, songId: string, options: { format?: string; maxBitRate?: number } = {}): string {
   const params = new URLSearchParams({
     ...Object.fromEntries(Object.entries(authParams(cfg)).map(([k, v]) => [k, String(v)])),
-    id: songId
+    id: songId,
+    ...(options.format ? { format: options.format } : {}),
+    ...(options.maxBitRate ? { maxBitRate: String(options.maxBitRate) } : {})
   });
 
   return `${cfg.navidromeUrl}/rest/stream.view?${params.toString()}`;
