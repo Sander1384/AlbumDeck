@@ -1,6 +1,6 @@
 services:
   albumdeck:
-    image: ghcr.io/sander1384/albumdeck:v0.3.32
+    image: ghcr.io/sander1384/albumdeck:v0.3.33
     build:
       context: .
       dockerfile: Dockerfile

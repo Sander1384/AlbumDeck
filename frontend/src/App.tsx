@@ -93,6 +93,8 @@ type BatchTarget = {
   mode: CoverEditorMode;
 };
 
+type CoverDrafts = Record<CoverEditorMode, CustomDiscCover>;
+
 type CastWindow = Window & {
   __onGCastApiAvailable?: (isAvailable: boolean) => void;
   cast?: any;
@@ -105,7 +107,8 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.32";
+const APP_VERSION = "v0.3.33";
+const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -216,6 +219,8 @@ export default function App() {
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
   const [batchActive, setBatchActive] = useState(false);
+  const [batchSkipped, setBatchSkipped] = useState<Set<string>>(() => new Set());
+  const [editorDrafts, setEditorDrafts] = useState<CoverDrafts>({ disc: EMPTY_COVER_DRAFT, back: EMPTY_COVER_DRAFT });
 
   const coverTimersRef = useRef<number[]>([]);
 
@@ -852,14 +857,33 @@ export default function App() {
       }
     : undefined;
 
+  const currentEditorDraft = (): CustomDiscCover => ({
+    source: coverSourceInput,
+    zoom: editorZoom,
+    x: editorX,
+    y: editorY,
+    rotate: editorRotate
+  });
+
+  const applyEditorDraft = (draft?: CustomDiscCover) => {
+    const next = draft ?? EMPTY_COVER_DRAFT;
+    setCoverSourceInput(next.source);
+    setEditorZoom(next.zoom);
+    setEditorX(next.x);
+    setEditorY(next.y);
+    setEditorRotate(next.rotate);
+  };
+
+  const batchKey = (albumId: string, mode: CoverEditorMode) => `${albumId}:${mode}`;
+
   const openCoverEditorFor = (album: Album, mode: CoverEditorMode = "disc") => {
-    const c = mode === "back" ? backCoverByAlbum[album.id] : discCoverByAlbum[album.id];
+    const drafts = {
+      disc: discCoverByAlbum[album.id] ?? EMPTY_COVER_DRAFT,
+      back: backCoverByAlbum[album.id] ?? EMPTY_COVER_DRAFT
+    };
     setCoverEditorMode(mode);
-    setCoverSourceInput(c?.source ?? "");
-    setEditorZoom(c?.zoom ?? 1);
-    setEditorX(c?.x ?? 0);
-    setEditorY(c?.y ?? 0);
-    setEditorRotate(c?.rotate ?? 0);
+    setEditorDrafts(drafts);
+    applyEditorDraft(drafts[mode]);
     setDiscogsCandidates([]);
     setDiscogsQuery(album.artist ? `${album.artist} ${album.name}` : album.name);
     setDiscogsResults([]);
@@ -874,11 +898,12 @@ export default function App() {
 
   const nextBatchTarget = (
     discMap: Record<string, CustomDiscCover> = discCoverByAlbum,
-    backMap: Record<string, CustomDiscCover> = backCoverByAlbum
+    backMap: Record<string, CustomDiscCover> = backCoverByAlbum,
+    skipped: Set<string> = batchSkipped
   ): BatchTarget | null => {
     for (const album of albums) {
-      if (!discMap[album.id]?.source) return { album, mode: "disc" };
-      if (!backMap[album.id]?.source) return { album, mode: "back" };
+      if (!discMap[album.id]?.source && !skipped.has(batchKey(album.id, "disc"))) return { album, mode: "disc" };
+      if (!backMap[album.id]?.source && !skipped.has(batchKey(album.id, "back"))) return { album, mode: "back" };
     }
     return null;
   };
@@ -891,7 +916,9 @@ export default function App() {
   };
 
   const startBatch = async () => {
-    const target = nextBatchTarget();
+    const skipped = new Set<string>();
+    setBatchSkipped(skipped);
+    const target = nextBatchTarget(discCoverByAlbum, backCoverByAlbum, skipped);
     if (!target) {
       setError("All albums already have CD artwork and sleeve backs.");
       return;
@@ -905,6 +932,21 @@ export default function App() {
       setBatchActive(false);
       setCoverEditorOpen(false);
       setError("Batch complete: all albums have CD artwork and sleeve backs.");
+      return;
+    }
+    await openBatchTarget(target);
+  };
+
+  const skipBatchItem = async () => {
+    if (!selectedAlbum) return;
+    const skipped = new Set(batchSkipped);
+    skipped.add(batchKey(selectedAlbum.id, coverEditorMode));
+    setBatchSkipped(skipped);
+    const target = nextBatchTarget(discCoverByAlbum, backCoverByAlbum, skipped);
+    if (!target) {
+      setBatchActive(false);
+      setCoverEditorOpen(false);
+      setError("Batch complete for this pass. Skipped items were left unchanged.");
       return;
     }
     await openBatchTarget(target);
@@ -963,13 +1005,11 @@ export default function App() {
 
   const switchCoverEditorMode = (mode: CoverEditorMode) => {
     if (!selectedAlbum || mode === coverEditorMode) return;
-    const c = mode === "back" ? backCoverByAlbum[selectedAlbum.id] : discCoverByAlbum[selectedAlbum.id];
+    const drafts = { ...editorDrafts, [coverEditorMode]: currentEditorDraft() };
+    const c = drafts[mode];
     setCoverEditorMode(mode);
-    setCoverSourceInput(c?.source ?? "");
-    setEditorZoom(c?.zoom ?? 1);
-    setEditorX(c?.x ?? 0);
-    setEditorY(c?.y ?? 0);
-    setEditorRotate(c?.rotate ?? 0);
+    setEditorDrafts(drafts);
+    applyEditorDraft(c);
     setDiscogsCandidates([]);
     setEditorError(null);
   };
@@ -990,41 +1030,35 @@ export default function App() {
   const saveEditorCover = () => {
     if (!selectedAlbum) return;
     const albumId = selectedAlbum.id;
-    const src = coverSourceInput.trim();
-    if (!src) {
-      const setter = coverEditorMode === "back" ? setBackCoverByAlbum : setDiscCoverByAlbum;
-      setter((prev) => {
-        const next = { ...prev };
-        delete next[albumId];
-        return next;
-      });
-      void deleteCustomDiscCover(coverEditorMode === "back" ? backCoverKey(albumId) : albumId).catch((e) => {
-        setError(e instanceof Error ? e.message : "Could not remove cover");
-      });
-      setCoverEditorOpen(false);
-      if (batchActive) {
-        setBatchActive(false);
-        setError("Batch stopped. Save artwork to continue automatically.");
-      }
+    const drafts = { ...editorDrafts, [coverEditorMode]: currentEditorDraft() };
+    const discDraft = { ...drafts.disc, source: drafts.disc.source.trim() };
+    const backDraft = { ...drafts.back, source: drafts.back.source.trim() };
+
+    if (batchActive && !drafts[coverEditorMode].source.trim()) {
+      setEditorError("Choose artwork or use Skip for this batch item.");
       return;
     }
-    const cover = {
-      source: src,
-      zoom: editorZoom,
-      x: editorX,
-      y: editorY,
-      rotate: editorRotate
-    };
-    const setter = coverEditorMode === "back" ? setBackCoverByAlbum : setDiscCoverByAlbum;
-    const nextDisc = coverEditorMode === "disc" ? { ...discCoverByAlbum, [albumId]: cover } : discCoverByAlbum;
-    const nextBack = coverEditorMode === "back" ? { ...backCoverByAlbum, [albumId]: cover } : backCoverByAlbum;
-    setter((prev) => ({
-      ...prev,
-      [albumId]: cover
-    }));
-    void saveCustomDiscCover(coverEditorMode === "back" ? backCoverKey(albumId) : albumId, cover).catch((e) => {
-      setError(e instanceof Error ? e.message : "Could not save cover");
+
+    const nextDisc = { ...discCoverByAlbum };
+    const nextBack = { ...backCoverByAlbum };
+
+    if (discDraft.source) nextDisc[albumId] = discDraft;
+    else delete nextDisc[albumId];
+
+    if (backDraft.source) nextBack[albumId] = backDraft;
+    else delete nextBack[albumId];
+
+    setDiscCoverByAlbum(nextDisc);
+    setBackCoverByAlbum(nextBack);
+    setEditorDrafts({ disc: discDraft, back: backDraft });
+
+    void Promise.all([
+      discDraft.source ? saveCustomDiscCover(albumId, discDraft) : deleteCustomDiscCover(albumId),
+      backDraft.source ? saveCustomDiscCover(backCoverKey(albumId), backDraft) : deleteCustomDiscCover(backCoverKey(albumId))
+    ]).catch((e) => {
+      setError(e instanceof Error ? e.message : "Could not save covers");
     });
+
     setCoverEditorOpen(false);
     if (batchActive) {
       void advanceBatch(nextDisc, nextBack);
@@ -1251,13 +1285,10 @@ export default function App() {
       <footer className="player-bar">
         <div className="deck-top">
           <div className="deck-transport">
-            <button className="line-btn ghost-line logout-line" onClick={() => void logout()} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
-            <button className="line-btn ghost-line" onClick={() => setAdminOpen(true)} aria-label="Admin settings" title="Admin settings"><Icon name="admin" /></button>
             <button className="line-btn" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
             <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <button className="line-btn ghost-line text-line" onClick={() => setMenuOpen(true)} aria-label="Open CD rack">CD</button>
-            <button className="line-btn ghost-line" onClick={() => openCoverEditor()} aria-label="Set artwork"><Icon name="image" /></button>
             <div className="speed-control">
               <button
                 className={`line-btn ghost-line ${speedPanelOpen ? "active-line" : ""}`}
@@ -1309,6 +1340,10 @@ export default function App() {
             >
               <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} />
             </button>
+            <span className="transport-divider" aria-hidden="true" />
+            <button className="line-btn ghost-line" onClick={() => openCoverEditor()} aria-label="Set artwork"><Icon name="image" /></button>
+            <button className="line-btn ghost-line" onClick={() => setAdminOpen(true)} aria-label="Admin settings" title="Admin settings"><Icon name="admin" /></button>
+            <button className="line-btn ghost-line logout-line" onClick={() => void logout()} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
           </div>
         </div>
 
@@ -1394,16 +1429,21 @@ export default function App() {
               </h2>
               <div className="menu-actions">
                 {batchActive ? (
-                  <button className="menu-action-btn" onClick={() => setBatchActive(false)}>
-                    Stop batch
-                  </button>
+                  <>
+                    <button className="menu-action-btn" onClick={() => void skipBatchItem()}>
+                      Skip
+                    </button>
+                    <button className="menu-action-btn" onClick={() => setBatchActive(false)}>
+                      Stop batch
+                    </button>
+                  </>
                 ) : null}
                 <button onClick={() => setCoverEditorOpen(false)} aria-label="Close editor"><Icon name="close" /></button>
               </div>
             </div>
             {batchActive ? (
               <p className="batch-note">
-                Save this {coverEditorMode === "back" ? "sleeve back" : "CD artwork"} to continue to the next missing cover.
+                Save stores both CD and Back for this album. Skip leaves this item unchanged and moves on.
               </p>
             ) : null}
             <div className="cd-editor-grid">

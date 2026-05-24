@@ -285,8 +285,8 @@ body {
 .back-cover-inlay {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: center top;
+  object-fit: cover;
+  object-position: center center;
   display: block;
   transform-origin: center center;
 }
@@ -521,6 +521,12 @@ body {
   justify-content: flex-start;
   align-items: center;
   gap: 7px;
+}
+
+.transport-divider {
+  width: 18px;
+  height: 14px;
+  display: block;
 }
 
 .line-btn {
