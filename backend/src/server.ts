@@ -23,6 +23,11 @@ const NAVIDROME_CLIENT = process.env.NAVIDROME_CLIENT?.trim() || "albumdeck-app"
 const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?? "false").toLowerCase() === "true";
 const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN?.trim() ?? "";
 const DISCOGS_USER_AGENT = "AlbumDeck/0.3.0 +https://github.com/Sander1384/AlbumDeck";
+const CAST_URL_TTL_SECONDS = Number(process.env.CAST_URL_TTL_SECONDS ?? 60 * 60 * 6);
+const CAST_PUBLIC_URL = process.env.CAST_PUBLIC_URL?.trim().replace(/\/+$/, "") ?? "";
+const CAST_TOKEN_SECRET =
+  process.env.CAST_TOKEN_SECRET?.trim() ||
+  crypto.createHash("sha256").update(`${NAVIDROME_URL}:${NAVIDROME_USER}:${NAVIDROME_PASS}`).digest("hex");
 let customCoverWriteQueue: Promise<void> = Promise.resolve();
 const activeSessions = new Set<string>();
 
@@ -105,6 +110,41 @@ function createSession(res: express.Response, req: express.Request) {
 
 function clearSession(res: express.Response) {
   res.setHeader("set-cookie", "albumdeck_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0");
+}
+
+function castSignature(songId: string, expires: number) {
+  return crypto.createHmac("sha256", CAST_TOKEN_SECRET).update(`${songId}:${expires}`).digest("hex");
+}
+
+function timingSafeTextEqual(a: string, b: string) {
+  const left = Buffer.from(a, "hex");
+  const right = Buffer.from(b, "hex");
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function createCastStreamPath(songId: string) {
+  const expires = Math.floor(Date.now() / 1000) + CAST_URL_TTL_SECONDS;
+  const signature = castSignature(songId, expires);
+  return `/api/cast-stream/${encodeURIComponent(songId)}?expires=${expires}&sig=${signature}`;
+}
+
+function createCastStreamUrl(req: express.Request, songId: string) {
+  const streamPath = createCastStreamPath(songId);
+  if (CAST_PUBLIC_URL) return new URL(streamPath, `${CAST_PUBLIC_URL}/`).toString();
+
+  const proto = typeof req.headers["x-forwarded-proto"] === "string" ? req.headers["x-forwarded-proto"].split(",")[0].trim() : req.protocol;
+  const host = typeof req.headers["x-forwarded-host"] === "string" ? req.headers["x-forwarded-host"].split(",")[0].trim() : req.get("host");
+  if (!host) return streamPath;
+  return `${proto}://${host}${streamPath}`;
+}
+
+function validateCastStreamRequest(req: express.Request) {
+  const songId = String(req.params.songId);
+  const expires = Number(req.query.expires);
+  const signature = typeof req.query.sig === "string" ? req.query.sig : "";
+  if (!Number.isFinite(expires) || expires < Math.floor(Date.now() / 1000)) return false;
+  if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
+  return timingSafeTextEqual(signature, castSignature(songId, expires));
 }
 
 async function isAuthenticated(req: express.Request) {
@@ -369,6 +409,23 @@ app.put("/api/auth/admin", requireAuth, async (req, res) => {
   }
 });
 
+async function handleCastStream(req: express.Request, res: express.Response) {
+  if (!validateCastStreamRequest(req)) {
+    res.status(403).json({ error: "Invalid or expired Cast stream URL" });
+    return;
+  }
+
+  try {
+    const streamUrl = subsonicStreamUrl(navidromeConfig, String(req.params.songId), { format: "mp3", maxBitRate: 320 });
+    await pipeNavidromeStream(req, res, streamUrl, "audio/mpeg");
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Cast stream failed" });
+  }
+}
+
+app.head("/api/cast-stream/:songId", handleCastStream);
+app.get("/api/cast-stream/:songId", handleCastStream);
+
 app.use("/api", requireAuth);
 
 app.get("/api/albums", async (req, res) => {
@@ -422,13 +479,8 @@ app.get("/api/stream/:songId", async (req, res) => {
   }
 });
 
-app.get("/api/cast-stream/:songId", async (req, res) => {
-  try {
-    const streamUrl = subsonicStreamUrl(navidromeConfig, req.params.songId, { format: "mp3", maxBitRate: 320 });
-    await pipeNavidromeStream(req, res, streamUrl, "audio/mpeg");
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Cast stream failed" });
-  }
+app.get("/api/cast-url/:songId", (req, res) => {
+  res.json({ url: createCastStreamUrl(req, String(req.params.songId)), expiresIn: CAST_URL_TTL_SECONDS });
 });
 
 async function pipeNavidromeStream(
@@ -455,9 +507,16 @@ async function pipeNavidromeStream(
   }
   res.setHeader("content-type", contentType);
   res.setHeader("accept-ranges", typeof acceptRanges === "string" ? acceptRanges : "bytes");
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("access-control-expose-headers", "Accept-Ranges, Content-Length, Content-Range, Content-Type");
   if (typeof contentLength === "string") res.setHeader("content-length", contentLength);
   if (typeof contentRange === "string") res.setHeader("content-range", contentRange);
   res.setHeader("cache-control", "no-store");
+  if (req.method === "HEAD") {
+    response.data.destroy();
+    res.end();
+    return;
+  }
   response.data.pipe(res);
 }
 

@@ -98,8 +98,9 @@ export function streamUrl(songId: string): string {
   return `${API_BASE}/stream/${encodeURIComponent(songId)}`;
 }
 
-export function castStreamUrl(songId: string): string {
-  return `${API_BASE}/cast-stream/${encodeURIComponent(songId)}`;
+export async function fetchCastStreamUrl(songId: string): Promise<string> {
+  const data = await apiGet<{ url: string }>(`/cast-url/${encodeURIComponent(songId)}`);
+  return data.url;
 }
 
 export function proxyImageUrl(url: string): string {

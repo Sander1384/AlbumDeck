@@ -1,10 +1,10 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  castStreamUrl,
   coverUrl,
   fetchAuthStatus,
   fetchAlbum,
   fetchAlbums,
+  fetchCastStreamUrl,
   fetchCustomDiscCovers,
   deleteCustomDiscCover,
   fetchDiscogsImages,
@@ -107,7 +107,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.37";
+const APP_VERSION = "v0.3.38";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function backCoverKey(albumId: string): string {
@@ -150,6 +150,9 @@ export default function App() {
   const playTokenRef = useRef(0);
   const normalizedCoverCacheRef = useRef<Map<string, string>>(new Map());
   const castSessionRef = useRef<any>(null);
+  const castMediaRef = useRef<any>(null);
+  const castProgressTimerRef = useRef<number | null>(null);
+  const castEndedSongRef = useRef<string | null>(null);
   const castOptionsReadyRef = useRef(false);
   const castListenerAttachedRef = useRef(false);
   const isCastingRef = useRef(false);
@@ -489,13 +492,56 @@ export default function App() {
 
   const absoluteUrl = (url: string) => new URL(url, window.location.href).toString();
 
+  const stopCastProgressSync = () => {
+    if (castProgressTimerRef.current !== null) {
+      window.clearInterval(castProgressTimerRef.current);
+      castProgressTimerRef.current = null;
+    }
+  };
+
+  const syncCastMediaState = (media = castMediaRef.current) => {
+    const win = window as CastWindow;
+    if (!media || !win.chrome?.cast) return;
+
+    const playerState = media.playerState;
+    const playing = playerState === win.chrome.cast.media.PlayerState.PLAYING;
+    setIsPlaying(playing);
+
+    const remoteTime = typeof media.getEstimatedTime === "function" ? media.getEstimatedTime() : media.currentTime;
+    if (Number.isFinite(remoteTime)) setElapsed(Math.max(0, remoteTime));
+
+    const idleReason = media.idleReason;
+    const finished =
+      playerState === win.chrome.cast.media.PlayerState.IDLE &&
+      idleReason === win.chrome.cast.media.IdleReason.FINISHED;
+    const songId = currentTrackRef.current?.id;
+    if (finished && songId && castEndedSongRef.current !== songId) {
+      castEndedSongRef.current = songId;
+      void next();
+    }
+  };
+
+  const attachCastMedia = (media: any) => {
+    stopCastProgressSync();
+    castMediaRef.current = media;
+    castEndedSongRef.current = null;
+    if (media?.addUpdateListener) {
+      media.addUpdateListener(() => syncCastMediaState(media));
+    }
+    syncCastMediaState(media);
+    castProgressTimerRef.current = window.setInterval(() => syncCastMediaState(media), 1000);
+  };
+
   const loadCastMedia = async (song: Song) => {
     const win = window as CastWindow;
     const session = castSessionRef.current;
     if (!session || !win.chrome?.cast) return false;
 
     const album = selectedAlbumRef.current;
-    const mediaInfo = new win.chrome.cast.media.MediaInfo(absoluteUrl(castStreamUrl(song.id)), "audio/mpeg");
+    const mediaUrl = absoluteUrl(await fetchCastStreamUrl(song.id));
+    const mediaInfo = new win.chrome.cast.media.MediaInfo(mediaUrl, "audio/mpeg");
+    mediaInfo.contentUrl = mediaUrl;
+    mediaInfo.entity = mediaUrl;
     mediaInfo.streamType = win.chrome.cast.media.StreamType.BUFFERED;
     if (Number.isFinite(song.duration) && song.duration && song.duration > 0) mediaInfo.duration = song.duration;
 
@@ -508,15 +554,17 @@ export default function App() {
 
     const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
     request.autoplay = true;
-    const errorCode = await session.loadMedia(request);
-    if (errorCode) throw new Error(String(errorCode));
+    request.currentTime = Math.max(0, elapsed);
+    const media = await session.loadMedia(request);
+    attachCastMedia(media);
+    audioRef.current?.pause();
     setIsPlaying(true);
     return true;
   };
 
   const toggleCastPlayback = async () => {
     const win = window as CastWindow;
-    const media = castSessionRef.current?.getMediaSession?.();
+    const media = castMediaRef.current ?? castSessionRef.current?.getMediaSession?.();
     if (!media || !win.chrome?.cast) return;
 
     const isRemotePlaying = media.playerState === win.chrome.cast.media.PlayerState.PLAYING;
@@ -526,7 +574,7 @@ export default function App() {
       if (isRemotePlaying) media.pause(null, done, fail);
       else media.play(null, done, fail);
     });
-    setIsPlaying(!isRemotePlaying);
+    syncCastMediaState(media);
   };
 
   const requestCastSession = async () => {
@@ -735,6 +783,8 @@ export default function App() {
 
       castSessionRef.current = context.getCurrentSession();
       setIsCasting(Boolean(castSessionRef.current));
+      const existingMedia = castSessionRef.current?.getMediaSession?.();
+      if (existingMedia) attachCastMedia(existingMedia);
 
       context.addEventListener(win.cast.framework.CastContextEventType.SESSION_STATE_CHANGED, (event: any) => {
         const state = event.sessionState;
@@ -747,8 +797,12 @@ export default function App() {
 
         if (active) {
           audioRef.current?.pause();
-          const song = currentTrackRef.current;
-          if (song) void loadCastMedia(song).catch((e) => setError(castErrorMessage(e, "Could not load Cast media")));
+          const media = castSessionRef.current?.getMediaSession?.();
+          if (media) attachCastMedia(media);
+        } else {
+          stopCastProgressSync();
+          castMediaRef.current = null;
+          setIsPlaying(false);
         }
       });
     };
@@ -761,6 +815,7 @@ export default function App() {
 
     return () => {
       disposed = true;
+      stopCastProgressSync();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -815,6 +870,19 @@ export default function App() {
   };
 
   const seek = (value: number) => {
+    if (isCastingRef.current) {
+      const media = castMediaRef.current ?? castSessionRef.current?.getMediaSession?.();
+      const win = window as CastWindow;
+      if (!media || !win.chrome?.cast || !Number.isFinite(value)) return;
+      const request = new win.chrome.cast.media.SeekRequest();
+      request.currentTime = value;
+      media.seek(request, () => {
+        setElapsed(value);
+        syncCastMediaState(media);
+      }, (err: unknown) => setError(castErrorMessage(err, "Could not seek Cast media")));
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio || !Number.isFinite(value)) return;
     audio.currentTime = value;

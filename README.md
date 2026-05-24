@@ -54,7 +54,7 @@ Before deploying, set:
 The Portainer example is pinned to:
 
 ```text
-ghcr.io/sander1384/albumdeck:v0.3.37
+ghcr.io/sander1384/albumdeck:v0.3.38
 ```
 
 After deploying, open:
@@ -75,6 +75,9 @@ http://<NAS-IP>:8080
 | `NAVIDROME_ALBUM_BATCH_SIZE` | no | `500` | Album page size when loading the library. |
 | `NAVIDROME_MAX_ALBUMS` | no | `20000` | Safety cap for full library loading. |
 | `DISCOGS_TOKEN` | no | empty | Optional Discogs token for more reliable search/image lookup. |
+| `CAST_URL_TTL_SECONDS` | no | `21600` | Lifetime for temporary signed Chromecast stream URLs. |
+| `CAST_PUBLIC_URL` | no | request URL | Reachable base URL for Chromecast media, for example `http://nas-ip:8080` when your browser uses an HTTPS proxy. |
+| `CAST_TOKEN_SECRET` | no | derived | Optional secret used to sign Chromecast stream URLs. |
 | `APP_PORT` | no | `8080` | Port inside the container. |
 
 ## Persistent Data
@@ -101,6 +104,8 @@ Google Cast support depends on the browser and network:
 - Open AlbumDeck via HTTPS.
 - Use a hostname or IP address that your Chromecast can reach.
 - Do not cast from `localhost`; the Chromecast device cannot load your computer's localhost.
+- Cast streams use temporary signed URLs, so the Chromecast can fetch audio without your browser login cookie while the rest of the API stays protected.
+- If your browser reaches AlbumDeck through a proxy or certificate that Chromecast cannot load, set `CAST_PUBLIC_URL` to the direct reachable AlbumDeck base URL.
 
 ## Local Development
 
@@ -137,7 +142,7 @@ Tags:
 
 - `latest` and `main` are published from the `main` branch.
 - `vX.Y.Z` tags publish versioned images.
-- The compose examples are pinned to `v0.3.37` so new deployments do not accidentally pull an older cached image.
+- The compose examples are pinned to `v0.3.38` so new deployments do not accidentally pull an older cached image.
 
 ## Privacy Notes
 
