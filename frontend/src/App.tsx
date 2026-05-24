@@ -38,6 +38,19 @@ function hashText(input: string): number {
   return Math.abs(h);
 }
 
+function castErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object") {
+    const payload = error as Record<string, unknown>;
+    const parts = [payload.code, payload.description, payload.details]
+      .filter((part) => typeof part === "string" && part.trim())
+      .map((part) => String(part));
+    if (parts.length) return parts.join(": ");
+  }
+  const text = String(error ?? "").trim();
+  return text && text !== "[object Object]" ? text : fallback;
+}
+
 type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
 
 function Icon({ name }: { name: IconName }) {
@@ -78,7 +91,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.26";
+const APP_VERSION = "v0.3.27";
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -493,7 +506,7 @@ export default function App() {
       const song = currentTrackRef.current;
       if (song) await loadCastMedia(song);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e ?? "");
+      const message = castErrorMessage(e, "");
       if (!message.includes("cancel")) {
         setError(message || "Could not start Cast");
       }
@@ -677,7 +690,7 @@ export default function App() {
         if (active) {
           audioRef.current?.pause();
           const song = currentTrackRef.current;
-          if (song) void loadCastMedia(song).catch((e) => setError(e instanceof Error ? e.message : "Could not load Cast media"));
+          if (song) void loadCastMedia(song).catch((e) => setError(castErrorMessage(e, "Could not load Cast media")));
         }
       });
     };

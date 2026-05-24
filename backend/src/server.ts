@@ -237,13 +237,27 @@ app.get("/api/cover/:coverId", async (req, res) => {
 app.get("/api/stream/:songId", async (req, res) => {
   try {
     const streamUrl = subsonicStreamUrl(navidromeConfig, req.params.songId);
+    const range = typeof req.headers.range === "string" ? req.headers.range : undefined;
     const response = await axios.get(streamUrl, {
-      responseType: "stream"
+      responseType: "stream",
+      headers: range ? { range } : undefined,
+      validateStatus: (status) => status >= 200 && status < 300
     });
 
     const contentTypeHeader = response.headers["content-type"];
     const contentType = typeof contentTypeHeader === "string" ? contentTypeHeader : "audio/mpeg";
+    const contentLength = response.headers["content-length"];
+    const contentRange = response.headers["content-range"];
+    const acceptRanges = response.headers["accept-ranges"];
+
+    if (response.status === 206) {
+      res.status(206);
+    }
     res.setHeader("content-type", contentType);
+    res.setHeader("accept-ranges", typeof acceptRanges === "string" ? acceptRanges : "bytes");
+    if (typeof contentLength === "string") res.setHeader("content-length", contentLength);
+    if (typeof contentRange === "string") res.setHeader("content-range", contentRange);
+    res.setHeader("cache-control", "no-store");
     response.data.pipe(res);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Stream failed" });
