@@ -108,7 +108,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.41";
+const APP_VERSION = "v0.3.42";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function backCoverKey(albumId: string): string {
@@ -1548,6 +1548,7 @@ export default function App() {
               type="range"
               min={0}
               max={Math.max(total, 1)}
+              step={0.01}
               value={Math.min(elapsed, Math.max(total, 1))}
               onChange={(e) => seek(Number(e.target.value))}
               className="slider"
