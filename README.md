@@ -14,6 +14,7 @@ AlbumDeck is a kiosk-friendly CD-style web player for Navidrome. It shows a larg
 - Optional Discogs search for custom CD and sleeve-back artwork.
 - Persistent custom artwork in `/app/.data/custom-disc-covers.json`.
 - Optional Google Cast sender support in Chrome/Chromium over HTTPS.
+- Built-in AlbumDeck login with an admin page for changing the app username and password.
 
 ## Quick Start
 
@@ -52,7 +53,7 @@ Before deploying, set:
 The Portainer example is pinned to:
 
 ```text
-ghcr.io/sander1384/albumdeck:v0.3.30
+ghcr.io/sander1384/albumdeck:v0.3.31
 ```
 
 After deploying, open:
@@ -83,7 +84,13 @@ AlbumDeck writes custom CD cover mappings to:
 /app/.data/custom-disc-covers.json
 ```
 
-Mount `/app/.data` to a Docker volume or NAS folder if you want custom covers to survive updates.
+It stores the local AlbumDeck login in:
+
+```text
+/app/.data/auth.json
+```
+
+Mount `/app/.data` to a Docker volume or NAS folder if you want custom covers and the app login to survive updates. Delete `auth.json` to reset the AlbumDeck login and show the setup screen again.
 
 ## Chromecast
 
@@ -129,7 +136,7 @@ Tags:
 
 - `latest` and `main` are published from the `main` branch.
 - `vX.Y.Z` tags publish versioned images.
-- The compose examples are pinned to `v0.3.30` so new deployments do not accidentally pull an older cached image.
+- The compose examples are pinned to `v0.3.31` so new deployments do not accidentally pull an older cached image.
 
 ## Privacy Notes
 

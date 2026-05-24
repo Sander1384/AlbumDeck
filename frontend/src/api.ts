@@ -21,6 +21,12 @@ export type DiscogsResult = {
   formats?: string[];
 };
 
+export type AuthStatus = {
+  configured: boolean;
+  authenticated: boolean;
+  username?: string;
+};
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 const COVER_SIZE = Number((import.meta.env.VITE_COVER_SIZE as string | undefined) ?? 1200);
 
@@ -34,11 +40,44 @@ async function responseError(response: Response): Promise<Error> {
 }
 
 async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`);
+  const response = await fetch(`${API_BASE}${path}`, { credentials: "include" });
   if (!response.ok) {
     throw await responseError(response);
   }
   return (await response.json()) as T;
+}
+
+async function apiSend<T>(path: string, method: string, body?: object): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    credentials: "include",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!response.ok) {
+    throw await responseError(response);
+  }
+  return (await response.json()) as T;
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  return apiGet<AuthStatus>("/auth/status");
+}
+
+export async function setupAdmin(username: string, password: string): Promise<AuthStatus> {
+  return apiSend<AuthStatus>("/auth/setup", "POST", { username, password });
+}
+
+export async function loginAdmin(username: string, password: string): Promise<AuthStatus> {
+  return apiSend<AuthStatus>("/auth/login", "POST", { username, password });
+}
+
+export async function logoutAdmin(): Promise<void> {
+  await apiSend<{ ok: boolean }>("/auth/logout", "POST");
+}
+
+export async function updateAdminCredentials(username: string, currentPassword: string, password: string): Promise<AuthStatus> {
+  return apiSend<AuthStatus>("/auth/admin", "PUT", { username, currentPassword, password });
 }
 
 export async function fetchAlbums(): Promise<Album[]> {
@@ -68,7 +107,7 @@ export function proxyImageUrl(url: string): string {
 }
 
 export async function fetchDiscogsImages(url: string): Promise<string[]> {
-  const response = await fetch(`${API_BASE}/discogs-images?url=${encodeURIComponent(url)}`);
+  const response = await fetch(`${API_BASE}/discogs-images?url=${encodeURIComponent(url)}`, { credentials: "include" });
   if (!response.ok) {
     throw await responseError(response);
   }
@@ -77,7 +116,7 @@ export async function fetchDiscogsImages(url: string): Promise<string[]> {
 }
 
 export async function searchDiscogs(query: string): Promise<DiscogsResult[]> {
-  const response = await fetch(`${API_BASE}/discogs-search?q=${encodeURIComponent(query)}`);
+  const response = await fetch(`${API_BASE}/discogs-search?q=${encodeURIComponent(query)}`, { credentials: "include" });
   if (!response.ok) {
     throw await responseError(response);
   }
@@ -93,6 +132,7 @@ export async function fetchCustomDiscCovers<T extends object>(): Promise<T> {
 export async function saveCustomDiscCovers(covers: object): Promise<void> {
   const response = await fetch(`${API_BASE}/custom-disc-covers`, {
     method: "PUT",
+    credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ covers })
   });
@@ -104,6 +144,7 @@ export async function saveCustomDiscCovers(covers: object): Promise<void> {
 export async function saveCustomDiscCover(albumId: string, cover: object): Promise<void> {
   const response = await fetch(`${API_BASE}/custom-disc-covers/${encodeURIComponent(albumId)}`, {
     method: "PUT",
+    credentials: "include",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ cover })
   });
@@ -114,7 +155,8 @@ export async function saveCustomDiscCover(albumId: string, cover: object): Promi
 
 export async function deleteCustomDiscCover(albumId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/custom-disc-covers/${encodeURIComponent(albumId)}`, {
-    method: "DELETE"
+    method: "DELETE",
+    credentials: "include"
   });
   if (!response.ok) {
     throw await responseError(response);

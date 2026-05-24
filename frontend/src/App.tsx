@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   castStreamUrl,
   coverUrl,
+  fetchAuthStatus,
   fetchAlbum,
   fetchAlbums,
   fetchCustomDiscCovers,
@@ -11,8 +12,13 @@ import {
   saveCustomDiscCover,
   saveCustomDiscCovers,
   searchDiscogs,
+  loginAdmin,
+  logoutAdmin,
+  setupAdmin,
   streamUrl,
+  updateAdminCredentials,
   type Album,
+  type AuthStatus,
   type DiscogsResult,
   type Song
 } from "./api";
@@ -52,11 +58,12 @@ function castErrorMessage(error: unknown, fallback: string): string {
   return text && text !== "[object Object]" ? text : fallback;
 }
 
-type IconName = "menu" | "close" | "logout" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
+type IconName = "menu" | "close" | "admin" | "logout" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
   if (name === "close") return <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>;
+  if (name === "admin") return <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6zM9 12l2 2 4-5" /></svg>;
   if (name === "logout") return <svg viewBox="0 0 24 24"><path d="M10 6H6v12h4M14 8l4 4-4 4M8 12h10" /></svg>;
   if (name === "prev") return <svg viewBox="0 0 24 24"><path d="M7 6v12M18 7l-8 5 8 5z" /></svg>;
   if (name === "next") return <svg viewBox="0 0 24 24"><path d="M17 6v12M6 7l8 5-8 5z" /></svg>;
@@ -93,7 +100,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.30";
+const APP_VERSION = "v0.3.31";
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -191,6 +198,18 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCastReady, setIsCastReady] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "setup">("login");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminUsername, setAdminUsername] = useState("");
+  const [adminCurrentPassword, setAdminCurrentPassword] = useState("");
+  const [adminNewPassword, setAdminNewPassword] = useState("");
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminBusy, setAdminBusy] = useState(false);
 
   const coverTimersRef = useRef<number[]>([]);
 
@@ -226,6 +245,22 @@ export default function App() {
     });
   }, [albums, artistLetterFilter]);
 
+  const refreshAuth = async () => {
+    const state = await fetchAuthStatus();
+    setAuthStatus(state);
+    setAuthMode(state.configured ? "login" : "setup");
+    setAdminUsername(state.username ?? "");
+    return state;
+  };
+
+  useEffect(() => {
+    void refreshAuth().catch((e) => {
+      setAuthError(e instanceof Error ? e.message : "Could not check login status");
+      setAuthStatus({ configured: false, authenticated: false });
+      setAuthMode("setup");
+    });
+  }, []);
+
   useEffect(() => {
     currentTrackRef.current = currentTrack;
     selectedAlbumRef.current = selectedAlbum;
@@ -238,6 +273,7 @@ export default function App() {
   }, [topCover?.key, currentCoverSrc, selectedAlbum?.id]);
 
   useEffect(() => {
+    if (!authStatus?.authenticated) return;
     const loadCovers = async () => {
       let localDisc: Record<string, CustomDiscCover> = {};
       let localBack: Record<string, CustomDiscCover> = {};
@@ -275,7 +311,7 @@ export default function App() {
       }
     };
     void loadCovers();
-  }, []);
+  }, [authStatus?.authenticated]);
 
   useEffect(() => {
     if (!coversLoaded) return;
@@ -634,6 +670,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!authStatus?.authenticated) return;
     const load = async () => {
       try {
         const loaded = await fetchAlbums();
@@ -660,7 +697,7 @@ export default function App() {
       clearCoverTimers();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authStatus?.authenticated]);
 
   useEffect(() => {
     let disposed = false;
@@ -813,9 +850,55 @@ export default function App() {
     setCoverEditorOpen(true);
   };
 
-  const logout = () => {
+  const logout = async () => {
     audioRef.current?.pause();
-    window.location.assign("/api/logout");
+    await logoutAdmin();
+    setSelectedAlbum(null);
+    setTracks([]);
+    setTrackIndex(0);
+    setElapsed(0);
+    setIsPlaying(false);
+    setAdminOpen(false);
+    setAuthUsername("");
+    setAuthPassword("");
+    const state = await refreshAuth();
+    setAuthStatus({ ...state, authenticated: false });
+  };
+
+  const submitAuth = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const state = authMode === "setup"
+        ? await setupAdmin(authUsername, authPassword)
+        : await loginAdmin(authUsername, authPassword);
+      setAuthStatus(state);
+      setAdminUsername(state.username ?? authUsername);
+      setAuthPassword("");
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const submitAdmin = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const state = await updateAdminCredentials(adminUsername, adminCurrentPassword, adminNewPassword);
+      setAuthStatus(state);
+      setAdminUsername(state.username ?? adminUsername);
+      setAdminCurrentPassword("");
+      setAdminNewPassword("");
+      setAdminMessage("Admin login updated.");
+    } catch (err) {
+      setAdminMessage(err instanceof Error ? err.message : "Could not update admin");
+    } finally {
+      setAdminBusy(false);
+    }
   };
 
   const switchCoverEditorMode = (mode: CoverEditorMode) => {
@@ -916,6 +999,87 @@ export default function App() {
       setDiscogsLoading(false);
     }
   };
+
+  if (!authStatus) {
+    return (
+      <main className="auth-shell">
+        <div className="auth-card compact-auth">
+          <img src="/cd.svg" className="auth-logo" alt="AlbumDeck" />
+          <h1>AlbumDeck</h1>
+          <p>Loading...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!authStatus.authenticated) {
+    const isSetup = authMode === "setup";
+    return (
+      <main className="auth-shell">
+        <form className="auth-card" onSubmit={(e) => void submitAuth(e)}>
+          <img src="/cd.svg" className="auth-logo" alt="AlbumDeck" />
+          <h1>AlbumDeck</h1>
+          <h2>{isSetup ? "Create admin login" : "Log in"}</h2>
+          <p>{isSetup ? "Choose the username and password for this AlbumDeck." : "Username and password are case-sensitive."}</p>
+          <label htmlFor="auth-user">Username</label>
+          <input
+            id="auth-user"
+            value={authUsername}
+            onChange={(e) => setAuthUsername(e.target.value)}
+            autoComplete="username"
+            autoFocus
+          />
+          <label htmlFor="auth-pass">Password</label>
+          <input
+            id="auth-pass"
+            type="password"
+            value={authPassword}
+            onChange={(e) => setAuthPassword(e.target.value)}
+            autoComplete={isSetup ? "new-password" : "current-password"}
+          />
+          {authError ? <p className="auth-error">{authError}</p> : null}
+          <button className="auth-submit" disabled={authBusy}>{authBusy ? "Please wait..." : isSetup ? "Create login" : "Log in"}</button>
+        </form>
+      </main>
+    );
+  }
+
+  if (adminOpen) {
+    return (
+      <main className="auth-shell">
+        <form className="auth-card admin-card" onSubmit={(e) => void submitAdmin(e)}>
+          <img src="/cd.svg" className="auth-logo" alt="AlbumDeck" />
+          <h1>AlbumDeck</h1>
+          <h2>Admin</h2>
+          <p>Change the app login for this AlbumDeck.</p>
+          <label htmlFor="admin-user">Username</label>
+          <input id="admin-user" value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} autoComplete="username" />
+          <label htmlFor="admin-current-pass">Current password</label>
+          <input
+            id="admin-current-pass"
+            type="password"
+            value={adminCurrentPassword}
+            onChange={(e) => setAdminCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          <label htmlFor="admin-new-pass">New password</label>
+          <input
+            id="admin-new-pass"
+            type="password"
+            value={adminNewPassword}
+            onChange={(e) => setAdminNewPassword(e.target.value)}
+            placeholder="Leave empty to keep current password"
+            autoComplete="new-password"
+          />
+          {adminMessage ? <p className="auth-error">{adminMessage}</p> : null}
+          <div className="auth-actions">
+            <button type="button" className="auth-secondary" onClick={() => setAdminOpen(false)}>Back</button>
+            <button className="auth-submit" disabled={adminBusy}>{adminBusy ? "Saving..." : "Save"}</button>
+          </div>
+        </form>
+      </main>
+    );
+  }
 
   return (
     <main className="app-shell theme-dark">
@@ -1018,7 +1182,8 @@ export default function App() {
       <footer className="player-bar">
         <div className="deck-top">
           <div className="deck-transport">
-            <button className="line-btn ghost-line logout-line" onClick={logout} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
+            <button className="line-btn ghost-line logout-line" onClick={() => void logout()} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
+            <button className="line-btn ghost-line" onClick={() => setAdminOpen(true)} aria-label="Admin settings" title="Admin settings"><Icon name="admin" /></button>
             <button className="line-btn" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
             <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>

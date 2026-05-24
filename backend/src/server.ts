@@ -1,6 +1,7 @@
 import "dotenv/config";
 import axios from "axios";
 import cors from "cors";
+import crypto from "crypto";
 import express from "express";
 import fs from "fs/promises";
 import fsSync from "fs";
@@ -14,6 +15,7 @@ const ALBUM_BATCH_SIZE = Number(process.env.NAVIDROME_ALBUM_BATCH_SIZE ?? 500);
 const MAX_ALBUMS = Number(process.env.NAVIDROME_MAX_ALBUMS ?? 20000);
 const DATA_DIR = path.resolve(process.cwd(), ".data");
 const CUSTOM_COVERS_FILE = path.join(DATA_DIR, "custom-disc-covers.json");
+const AUTH_FILE = path.join(DATA_DIR, "auth.json");
 const NAVIDROME_URL = process.env.NAVIDROME_URL?.trim() ?? "";
 const NAVIDROME_USER = process.env.NAVIDROME_USER?.trim() ?? "";
 const NAVIDROME_PASS = process.env.NAVIDROME_PASS?.trim() ?? "";
@@ -22,6 +24,7 @@ const NAVIDROME_ALLOW_INSECURE_TLS = (process.env.NAVIDROME_ALLOW_INSECURE_TLS ?
 const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN?.trim() ?? "";
 const DISCOGS_USER_AGENT = "AlbumDeck/0.3.0 +https://github.com/Sander1384/AlbumDeck";
 let customCoverWriteQueue: Promise<void> = Promise.resolve();
+const activeSessions = new Set<string>();
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
   throw new Error("Missing NAVIDROME_URL/NAVIDROME_USER/NAVIDROME_PASS in environment");
@@ -35,8 +38,98 @@ const navidromeConfig: NavidromeConfig = {
   allowInsecureTls: NAVIDROME_ALLOW_INSECURE_TLS
 };
 
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "8mb" }));
+
+type AuthConfig = {
+  username: string;
+  passwordHash: string;
+  salt: string;
+};
+
+function hashPassword(password: string, salt = crypto.randomBytes(16).toString("hex")) {
+  const passwordHash = crypto.pbkdf2Sync(password, salt, 310000, 32, "sha256").toString("hex");
+  return { salt, passwordHash };
+}
+
+function verifyPassword(password: string, auth: AuthConfig) {
+  const candidate = Buffer.from(hashPassword(password, auth.salt).passwordHash, "hex");
+  const stored = Buffer.from(auth.passwordHash, "hex");
+  return candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored);
+}
+
+async function readAuthConfig(): Promise<AuthConfig | null> {
+  try {
+    const raw = await fs.readFile(AUTH_FILE, "utf8");
+    const parsed = JSON.parse(raw) as Partial<AuthConfig>;
+    if (!parsed.username || !parsed.passwordHash || !parsed.salt) return null;
+    return {
+      username: parsed.username,
+      passwordHash: parsed.passwordHash,
+      salt: parsed.salt
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeAuthConfig(username: string, password: string) {
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  const next = { username, ...hashPassword(password) };
+  const tmp = `${AUTH_FILE}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
+  await fs.rename(tmp, AUTH_FILE);
+  return next;
+}
+
+function parseCookies(header?: string): Record<string, string> {
+  if (!header) return {};
+  return Object.fromEntries(
+    header.split(";").map((part) => {
+      const [key, ...rest] = part.trim().split("=");
+      return [key, decodeURIComponent(rest.join("="))];
+    }).filter(([key]) => Boolean(key))
+  );
+}
+
+function sessionCookieOptions(req: express.Request) {
+  const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
+  return `HttpOnly; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}${isSecure ? "; Secure" : ""}`;
+}
+
+function createSession(res: express.Response, req: express.Request) {
+  const token = crypto.randomBytes(32).toString("hex");
+  activeSessions.add(token);
+  res.setHeader("set-cookie", `albumdeck_session=${encodeURIComponent(token)}; ${sessionCookieOptions(req)}`);
+}
+
+function clearSession(res: express.Response) {
+  res.setHeader("set-cookie", "albumdeck_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0");
+}
+
+async function isAuthenticated(req: express.Request) {
+  const auth = await readAuthConfig();
+  if (!auth) return { configured: false, authenticated: false, username: undefined };
+  const token = parseCookies(req.headers.cookie).albumdeck_session;
+  return {
+    configured: true,
+    authenticated: Boolean(token && activeSessions.has(token)),
+    username: auth.username
+  };
+}
+
+async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const state = await isAuthenticated(req);
+  if (!state.configured) {
+    res.status(401).json({ error: "Setup required", setupRequired: true });
+    return;
+  }
+  if (!state.authenticated) {
+    res.status(401).json({ error: "Login required" });
+    return;
+  }
+  next();
+}
 
 async function readCustomCovers(): Promise<Record<string, unknown>> {
   try {
@@ -191,6 +284,92 @@ async function getDiscogsImagesFromHtml(url: string): Promise<string[]> {
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
+
+app.get("/api/auth/status", async (req, res) => {
+  const state = await isAuthenticated(req);
+  res.json(state);
+});
+
+app.post("/api/auth/setup", async (req, res) => {
+  try {
+    const existing = await readAuthConfig();
+    if (existing) {
+      res.status(409).json({ error: "Admin user already exists" });
+      return;
+    }
+    const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    if (username.length < 2 || password.length < 6) {
+      res.status(400).json({ error: "Use at least 2 characters for the username and 6 for the password" });
+      return;
+    }
+    const auth = await writeAuthConfig(username, password);
+    createSession(res, req);
+    res.json({ configured: true, authenticated: true, username: auth.username });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Setup failed" });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const auth = await readAuthConfig();
+    if (!auth) {
+      res.status(409).json({ error: "Setup required", setupRequired: true });
+      return;
+    }
+    const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    if (username !== auth.username || !verifyPassword(password, auth)) {
+      res.status(401).json({ error: "Invalid username or password" });
+      return;
+    }
+    createSession(res, req);
+    res.json({ configured: true, authenticated: true, username: auth.username });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Login failed" });
+  }
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  const token = parseCookies(req.headers.cookie).albumdeck_session;
+  if (token) activeSessions.delete(token);
+  clearSession(res);
+  res.json({ ok: true });
+});
+
+app.put("/api/auth/admin", requireAuth, async (req, res) => {
+  try {
+    const auth = await readAuthConfig();
+    if (!auth) {
+      res.status(409).json({ error: "Setup required", setupRequired: true });
+      return;
+    }
+    const username = typeof req.body?.username === "string" ? req.body.username.trim() : "";
+    const currentPassword = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    if (!verifyPassword(currentPassword, auth)) {
+      res.status(401).json({ error: "Current password is incorrect" });
+      return;
+    }
+    if (username.length < 2) {
+      res.status(400).json({ error: "Use at least 2 characters for the username" });
+      return;
+    }
+    if (password && password.length < 6) {
+      res.status(400).json({ error: "Use at least 6 characters for the new password" });
+      return;
+    }
+    const next = await writeAuthConfig(username, password || currentPassword);
+    activeSessions.clear();
+    createSession(res, req);
+    res.json({ configured: true, authenticated: true, username: next.username });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Could not update admin" });
+  }
+});
+
+app.use("/api", requireAuth);
 
 app.get("/api/albums", async (req, res) => {
   try {
@@ -511,31 +690,6 @@ app.delete("/api/custom-disc-covers/:albumId", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Failed to delete cover" });
   }
-});
-
-app.get("/api/logout", (_req, res) => {
-  res.setHeader("cache-control", "no-store");
-  res.setHeader("www-authenticate", 'Basic realm="AlbumDeck", charset="UTF-8"');
-  res.status(401).send(`<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Logged out - AlbumDeck</title>
-    <style>
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; color: #f1f4ff; background: #090b15; }
-      main { text-align: center; padding: 24px; }
-      a { color: #9bb5ff; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Logged out</h1>
-      <p>Refresh or open AlbumDeck again to log in.</p>
-      <a href="/">Open AlbumDeck</a>
-    </main>
-  </body>
-</html>`);
 });
 
 const STATIC_DIR = path.resolve(process.cwd(), "public");

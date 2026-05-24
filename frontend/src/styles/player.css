@@ -32,6 +32,123 @@ body {
     linear-gradient(120deg, var(--bg0), var(--bg1) 52%, var(--bg2));
 }
 
+.auth-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--txt);
+}
+
+.auth-card {
+  width: min(520px, calc(100vw - 32px));
+  padding: 34px;
+  border: 1px solid rgba(141, 104, 255, 0.34);
+  border-radius: 16px;
+  background: rgba(22, 18, 48, 0.82);
+  box-shadow: 0 28px 90px rgba(108, 63, 255, 0.22);
+  display: grid;
+  gap: 12px;
+}
+
+.compact-auth {
+  justify-items: center;
+  text-align: center;
+}
+
+.admin-card {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.auth-logo {
+  width: 92px;
+  height: 92px;
+  justify-self: center;
+  padding: 16px;
+  border: 1px solid rgba(144, 104, 255, 0.46);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(130, 76, 255, 0.28), rgba(72, 44, 144, 0.42));
+  filter: invert(1) drop-shadow(0 10px 26px rgba(116, 76, 255, 0.28));
+}
+
+.auth-card h1,
+.auth-card h2,
+.auth-card p {
+  margin: 0;
+  text-align: center;
+}
+
+.auth-card h1 {
+  margin-top: 10px;
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.auth-card h2 {
+  color: #cfc5ff;
+  font-size: 1.35rem;
+}
+
+.auth-card p {
+  color: #b8aef1;
+  font-size: 0.86rem;
+}
+
+.auth-card label {
+  margin-top: 8px;
+  color: #c8bcff;
+  font-weight: 700;
+}
+
+.auth-card input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(145, 108, 255, 0.58);
+  border-radius: 8px;
+  background: rgba(11, 6, 31, 0.52);
+  color: #f5f2ff;
+  padding: 9px 11px;
+  font: inherit;
+}
+
+.auth-card input:focus {
+  outline: 2px solid rgba(126, 78, 255, 0.74);
+  outline-offset: 1px;
+}
+
+.auth-submit,
+.auth-secondary {
+  min-height: 48px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.auth-submit {
+  margin-top: 8px;
+  background: linear-gradient(135deg, #8647ff, #6730ef);
+  box-shadow: 0 16px 42px rgba(103, 48, 239, 0.28);
+}
+
+.auth-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8d0ff;
+}
+
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.auth-error {
+  color: #ffb4c3;
+}
+
 .app-shell {
   min-height: 100vh;
   height: 100vh;
@@ -578,8 +695,6 @@ body {
 .track-label {
   width: 170px;
   margin: 0 0 8px 54px;
-  padding-bottom: 6px;
-  border-bottom: 4px solid #ff1122;
   color: #f0f4ff;
   font-size: 0.78rem;
   font-weight: 700;
