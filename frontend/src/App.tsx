@@ -107,7 +107,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.36";
+const APP_VERSION = "v0.3.37";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function backCoverKey(albumId: string): string {
@@ -1342,6 +1342,11 @@ export default function App() {
               <button className="line-btn ghost-line" onClick={() => setAdminOpen(true)} aria-label="Admin settings" title="Admin settings"><Icon name="admin" /></button>
               <button className="line-btn ghost-line logout-line" onClick={() => void logout()} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
             </div>
+            <div className="side-playback-controls" aria-label="Playback controls">
+              <button className="line-btn ghost-line" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
+              <button className="line-btn ghost-line play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
+              <button className="line-btn ghost-line" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
+            </div>
           </div>
         </div>
 
@@ -1357,9 +1362,6 @@ export default function App() {
 
         <div className="deck-bottom">
           <div className="bottom-transport">
-            <button className="line-btn" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
-            <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
-            <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <span className="track-label" aria-live="polite">
               {currentTrack ? `Track ${(trackIndex + 1).toString().padStart(2, "0")}` : "Track --"}
             </span>
