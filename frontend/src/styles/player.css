@@ -510,7 +510,7 @@ body {
 .deck-top {
   grid-column: 1;
   grid-row: 1;
-  align-self: start;
+  align-self: center;
   justify-self: center;
   pointer-events: auto;
 }
@@ -1306,7 +1306,7 @@ body {
   .deck-top {
     grid-column: 1;
     grid-row: 1;
-    align-self: start;
+    align-self: center;
     justify-self: center;
     pointer-events: auto;
   }
