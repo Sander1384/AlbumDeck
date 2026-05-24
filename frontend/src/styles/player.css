@@ -44,10 +44,10 @@ body {
 .auth-card {
   width: min(520px, calc(100vw - 32px));
   padding: 34px;
-  border: 1px solid rgba(141, 104, 255, 0.34);
-  border-radius: 16px;
-  background: rgba(22, 18, 48, 0.82);
-  box-shadow: 0 28px 90px rgba(108, 63, 255, 0.22);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(16, 24, 47, 0.86);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
   display: grid;
   gap: 12px;
 }
@@ -66,10 +66,10 @@ body {
   height: 92px;
   justify-self: center;
   padding: 16px;
-  border: 1px solid rgba(144, 104, 255, 0.46);
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(130, 76, 255, 0.28), rgba(72, 44, 144, 0.42));
-  filter: invert(1) drop-shadow(0 10px 26px rgba(116, 76, 255, 0.28));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  filter: invert(1) drop-shadow(0 10px 24px rgba(0, 0, 0, 0.28));
 }
 
 .auth-card h1,
@@ -86,34 +86,34 @@ body {
 }
 
 .auth-card h2 {
-  color: #cfc5ff;
+  color: var(--txt);
   font-size: 1.35rem;
 }
 
 .auth-card p {
-  color: #b8aef1;
+  color: var(--muted);
   font-size: 0.86rem;
 }
 
 .auth-card label {
   margin-top: 8px;
-  color: #c8bcff;
+  color: #d8e1ff;
   font-weight: 700;
 }
 
 .auth-card input {
   width: 100%;
   min-height: 44px;
-  border: 1px solid rgba(145, 108, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
-  background: rgba(11, 6, 31, 0.52);
-  color: #f5f2ff;
+  background: rgba(9, 11, 21, 0.52);
+  color: var(--txt);
   padding: 9px 11px;
   font: inherit;
 }
 
 .auth-card input:focus {
-  outline: 2px solid rgba(126, 78, 255, 0.74);
+  outline: 2px solid #6e8ef0;
   outline-offset: 1px;
 }
 
@@ -129,13 +129,13 @@ body {
 
 .auth-submit {
   margin-top: 8px;
-  background: linear-gradient(135deg, #8647ff, #6730ef);
-  box-shadow: 0 16px 42px rgba(103, 48, 239, 0.28);
+  background: linear-gradient(135deg, #6e8ef0, #9f8de0);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
 }
 
 .auth-secondary {
   background: rgba(255, 255, 255, 0.08);
-  color: #d8d0ff;
+  color: #d8e1ff;
 }
 
 .auth-actions {
@@ -146,7 +146,7 @@ body {
 }
 
 .auth-error {
-  color: #ffb4c3;
+  color: #d8e1ff;
 }
 
 .app-shell {
@@ -753,6 +753,7 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+  gap: 12px;
 }
 
 .menu-head h2 {
@@ -871,6 +872,31 @@ body {
   text-align: center;
   color: #ff9fb1;
   transform: translateX(-50%);
+}
+
+.menu-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-action-btn {
+  width: auto !important;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: 8px !important;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.menu-action-btn:disabled {
+  opacity: 0.46;
+}
+
+.batch-note {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .cd-editor-panel {

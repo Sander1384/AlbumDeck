@@ -15,6 +15,7 @@ AlbumDeck is a kiosk-friendly CD-style web player for Navidrome. It shows a larg
 - Persistent custom artwork in `/app/.data/custom-disc-covers.json`.
 - Optional Google Cast sender support in Chrome/Chromium over HTTPS.
 - Built-in AlbumDeck login with an admin page for changing the app username and password.
+- Batch artwork mode that walks through albums missing CD artwork or sleeve-back artwork.
 
 ## Quick Start
 
@@ -53,7 +54,7 @@ Before deploying, set:
 The Portainer example is pinned to:
 
 ```text
-ghcr.io/sander1384/albumdeck:v0.3.31
+ghcr.io/sander1384/albumdeck:v0.3.32
 ```
 
 After deploying, open:
@@ -136,7 +137,7 @@ Tags:
 
 - `latest` and `main` are published from the `main` branch.
 - `vX.Y.Z` tags publish versioned images.
-- The compose examples are pinned to `v0.3.31` so new deployments do not accidentally pull an older cached image.
+- The compose examples are pinned to `v0.3.32` so new deployments do not accidentally pull an older cached image.
 
 ## Privacy Notes
 
