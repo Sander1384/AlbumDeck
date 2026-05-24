@@ -58,7 +58,7 @@ function castErrorMessage(error: unknown, fallback: string): string {
   return text && text !== "[object Object]" ? text : fallback;
 }
 
-type IconName = "menu" | "close" | "admin" | "logout" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
+type IconName = "menu" | "close" | "admin" | "logout" | "prev" | "play" | "pause" | "stop" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
@@ -75,6 +75,7 @@ function Icon({ name }: { name: IconName }) {
   if (name === "speed") return <svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 8 8M12 8v4l3 2M17 4h4v4" /></svg>;
   if (name === "image") return <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 15l3-3 2 2 2-3 3 4M8.5 8.5h.01" /></svg>;
   if (name === "pause") return <svg viewBox="0 0 24 24"><path d="M8 6h3v12H8zM13 6h3v12h-3z" /></svg>;
+  if (name === "stop") return <svg viewBox="0 0 24 24"><path d="M7 7h10v10H7z" /></svg>;
   return <svg viewBox="0 0 24 24"><path d="M8 6l10 6-10 6z" /></svg>;
 }
 
@@ -107,7 +108,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.38";
+const APP_VERSION = "v0.3.39";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function backCoverKey(albumId: string): string {
@@ -153,6 +154,7 @@ export default function App() {
   const castMediaRef = useRef<any>(null);
   const castProgressTimerRef = useRef<number | null>(null);
   const castEndedSongRef = useRef<string | null>(null);
+  const castClockRef = useRef<{ baseTime: number; baseMs: number; state: string } | null>(null);
   const castOptionsReadyRef = useRef(false);
   const castListenerAttachedRef = useRef(false);
   const isCastingRef = useRef(false);
@@ -497,20 +499,45 @@ export default function App() {
       window.clearInterval(castProgressTimerRef.current);
       castProgressTimerRef.current = null;
     }
+    castClockRef.current = null;
   };
 
   const syncCastMediaState = (media = castMediaRef.current) => {
     const win = window as CastWindow;
-    if (!media || !win.chrome?.cast) return;
+    const sessionMedia = castSessionRef.current?.getMediaSession?.();
+    const activeMedia = sessionMedia ?? media;
+    if (!activeMedia || !win.chrome?.cast) return;
+    castMediaRef.current = activeMedia;
 
-    const playerState = media.playerState;
+    const playerState = activeMedia.playerState;
     const playing = playerState === win.chrome.cast.media.PlayerState.PLAYING;
     setIsPlaying(playing);
 
-    const remoteTime = typeof media.getEstimatedTime === "function" ? media.getEstimatedTime() : media.currentTime;
-    if (Number.isFinite(remoteTime)) setElapsed(Math.max(0, remoteTime));
+    const rawTime = Number.isFinite(activeMedia.currentTime)
+      ? activeMedia.currentTime
+      : typeof activeMedia.getEstimatedTime === "function"
+        ? activeMedia.getEstimatedTime()
+        : undefined;
+    const now = Date.now();
+    const previousClock = castClockRef.current;
+    if (Number.isFinite(rawTime)) {
+      const remoteTime = Math.max(0, Number(rawTime));
+      const shouldResetClock =
+        !previousClock ||
+        previousClock.state !== playerState ||
+        Math.abs(remoteTime - previousClock.baseTime) > 0.35;
+      if (shouldResetClock) {
+        castClockRef.current = { baseTime: remoteTime, baseMs: now, state: playerState };
+      }
+    }
 
-    const idleReason = media.idleReason;
+    const clock = castClockRef.current;
+    if (clock) {
+      const estimated = playing ? clock.baseTime + ((now - clock.baseMs) / 1000) : clock.baseTime;
+      setElapsed(Math.max(0, Math.min(estimated, total || estimated)));
+    }
+
+    const idleReason = activeMedia.idleReason;
     const finished =
       playerState === win.chrome.cast.media.PlayerState.IDLE &&
       idleReason === win.chrome.cast.media.IdleReason.FINISHED;
@@ -525,11 +552,12 @@ export default function App() {
     stopCastProgressSync();
     castMediaRef.current = media;
     castEndedSongRef.current = null;
+    castClockRef.current = null;
     if (media?.addUpdateListener) {
-      media.addUpdateListener(() => syncCastMediaState(media));
+      media.addUpdateListener(() => syncCastMediaState());
     }
-    syncCastMediaState(media);
-    castProgressTimerRef.current = window.setInterval(() => syncCastMediaState(media), 1000);
+    syncCastMediaState();
+    castProgressTimerRef.current = window.setInterval(() => syncCastMediaState(), 500);
   };
 
   const loadCastMedia = async (song: Song) => {
@@ -575,6 +603,30 @@ export default function App() {
       else media.play(null, done, fail);
     });
     syncCastMediaState(media);
+  };
+
+  const stopPlayback = async () => {
+    if (isCastingRef.current) {
+      const media = castMediaRef.current ?? castSessionRef.current?.getMediaSession?.();
+      if (media?.stop) {
+        await new Promise<void>((resolve, reject) => {
+          const done = () => resolve();
+          const fail = (err: unknown) => reject(err instanceof Error ? err : new Error("Cast stop failed"));
+          media.stop(null, done, fail);
+        }).catch((err) => setError(castErrorMessage(err, "Could not stop Cast media")));
+      }
+      stopCastProgressSync();
+      setIsPlaying(false);
+      setElapsed(0);
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setIsPlaying(false);
+    setElapsed(0);
   };
 
   const requestCastSession = async () => {
@@ -803,6 +855,7 @@ export default function App() {
           stopCastProgressSync();
           castMediaRef.current = null;
           setIsPlaying(false);
+          setElapsed(0);
         }
       });
     };
@@ -1413,6 +1466,7 @@ export default function App() {
             <div className="side-playback-controls" aria-label="Playback controls">
               <button className="line-btn ghost-line" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
               <button className="line-btn ghost-line play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
+              <button className="line-btn ghost-line" onClick={() => void stopPlayback()} aria-label="Stop"><Icon name="stop" /></button>
               <button className="line-btn ghost-line" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             </div>
           </div>
