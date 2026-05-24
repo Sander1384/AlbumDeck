@@ -52,11 +52,12 @@ function castErrorMessage(error: unknown, fallback: string): string {
   return text && text !== "[object Object]" ? text : fallback;
 }
 
-type IconName = "menu" | "close" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
+type IconName = "menu" | "close" | "logout" | "prev" | "play" | "pause" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
   if (name === "close") return <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>;
+  if (name === "logout") return <svg viewBox="0 0 24 24"><path d="M10 6H6v12h4M14 8l4 4-4 4M8 12h10" /></svg>;
   if (name === "prev") return <svg viewBox="0 0 24 24"><path d="M7 6v12M18 7l-8 5 8 5z" /></svg>;
   if (name === "next") return <svg viewBox="0 0 24 24"><path d="M17 6v12M6 7l8 5-8 5z" /></svg>;
   if (name === "sound") return <svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4zM17 9a5 5 0 0 1 0 6M19.5 6.5a8.5 8.5 0 0 1 0 11" /></svg>;
@@ -92,7 +93,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.29";
+const APP_VERSION = "v0.3.30";
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -812,6 +813,11 @@ export default function App() {
     setCoverEditorOpen(true);
   };
 
+  const logout = () => {
+    audioRef.current?.pause();
+    window.location.assign("/api/logout");
+  };
+
   const switchCoverEditorMode = (mode: CoverEditorMode) => {
     if (!selectedAlbum || mode === coverEditorMode) return;
     const c = mode === "back" ? backCoverByAlbum[selectedAlbum.id] : discCoverByAlbum[selectedAlbum.id];
@@ -1012,6 +1018,7 @@ export default function App() {
       <footer className="player-bar">
         <div className="deck-top">
           <div className="deck-transport">
+            <button className="line-btn ghost-line logout-line" onClick={logout} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
             <button className="line-btn" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
             <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
             <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
@@ -1082,6 +1089,9 @@ export default function App() {
         </div>
 
         <div className="deck-bottom">
+          <div className="track-label" aria-live="polite">
+            {currentTrack ? `Track ${(trackIndex + 1).toString().padStart(2, "0")}` : "Track --"}
+          </div>
           <div className="seek-row">
             <span>{fmt(elapsed)}</span>
             <input

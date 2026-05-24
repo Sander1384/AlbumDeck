@@ -384,7 +384,7 @@ body {
   padding: 0;
   display: grid;
   grid-template-columns: 38px 1fr;
-  grid-template-rows: 1fr 34px;
+  grid-template-rows: 1fr 56px;
   gap: 0 10px;
   z-index: 8;
   pointer-events: none;
@@ -430,6 +430,14 @@ body {
 
 .line-btn:hover {
   background: rgba(164, 173, 255, 0.12);
+}
+
+.logout-line {
+  color: #27a9ff;
+}
+
+.logout-line svg {
+  stroke-width: 2.2;
 }
 
 .active-line {
@@ -565,6 +573,19 @@ body {
   padding: 0;
   margin: 0;
   pointer-events: auto;
+}
+
+.track-label {
+  width: 170px;
+  margin: 0 0 8px 54px;
+  padding-bottom: 6px;
+  border-bottom: 4px solid #ff1122;
+  color: #f0f4ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .seek-row {
@@ -1108,7 +1129,7 @@ body {
     padding: 0;
     display: grid;
     grid-template-columns: 38px 1fr;
-    grid-template-rows: 1fr 34px;
+    grid-template-rows: 1fr 56px;
     gap: 0 10px;
     pointer-events: none;
   }

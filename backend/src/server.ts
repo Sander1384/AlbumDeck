@@ -513,6 +513,31 @@ app.delete("/api/custom-disc-covers/:albumId", async (req, res) => {
   }
 });
 
+app.get("/api/logout", (_req, res) => {
+  res.setHeader("cache-control", "no-store");
+  res.setHeader("www-authenticate", 'Basic realm="AlbumDeck", charset="UTF-8"');
+  res.status(401).send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Logged out - AlbumDeck</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; color: #f1f4ff; background: #090b15; }
+      main { text-align: center; padding: 24px; }
+      a { color: #9bb5ff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Logged out</h1>
+      <p>Refresh or open AlbumDeck again to log in.</p>
+      <a href="/">Open AlbumDeck</a>
+    </main>
+  </body>
+</html>`);
+});
+
 const STATIC_DIR = path.resolve(process.cwd(), "public");
 const STATIC_INDEX = path.join(STATIC_DIR, "index.html");
 if (fsSync.existsSync(STATIC_INDEX)) {
