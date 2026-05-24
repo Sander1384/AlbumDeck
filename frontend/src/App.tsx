@@ -107,7 +107,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.35";
+const APP_VERSION = "v0.3.36";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function backCoverKey(albumId: string): string {
@@ -1337,10 +1337,11 @@ export default function App() {
             >
               <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} />
             </button>
-            <span className="transport-divider" aria-hidden="true" />
-            <button className="line-btn ghost-line" onClick={() => openCoverEditor()} aria-label="Set artwork"><Icon name="image" /></button>
-            <button className="line-btn ghost-line" onClick={() => setAdminOpen(true)} aria-label="Admin settings" title="Admin settings"><Icon name="admin" /></button>
-            <button className="line-btn ghost-line logout-line" onClick={() => void logout()} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
+            <div className="utility-controls" aria-label="Album and admin tools">
+              <button className="line-btn ghost-line" onClick={() => openCoverEditor()} aria-label="Set artwork"><Icon name="image" /></button>
+              <button className="line-btn ghost-line" onClick={() => setAdminOpen(true)} aria-label="Admin settings" title="Admin settings"><Icon name="admin" /></button>
+              <button className="line-btn ghost-line logout-line" onClick={() => void logout()} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
+            </div>
           </div>
         </div>
 

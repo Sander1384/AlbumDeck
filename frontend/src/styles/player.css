@@ -523,10 +523,12 @@ body {
   gap: 7px;
 }
 
-.transport-divider {
-  width: 18px;
-  height: 14px;
-  display: block;
+.utility-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  margin-top: clamp(52px, 9dvh, 96px);
 }
 
 .line-btn {
