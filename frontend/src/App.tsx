@@ -107,7 +107,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.33";
+const APP_VERSION = "v0.3.34";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function backCoverKey(albumId: string): string {
@@ -1285,9 +1285,6 @@ export default function App() {
       <footer className="player-bar">
         <div className="deck-top">
           <div className="deck-transport">
-            <button className="line-btn" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
-            <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
-            <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
             <button className="line-btn ghost-line text-line" onClick={() => setMenuOpen(true)} aria-label="Open CD rack">CD</button>
             <div className="speed-control">
               <button
@@ -1358,8 +1355,13 @@ export default function App() {
         </div>
 
         <div className="deck-bottom">
-          <div className="track-label" aria-live="polite">
-            {currentTrack ? `Track ${(trackIndex + 1).toString().padStart(2, "0")}` : "Track --"}
+          <div className="bottom-transport">
+            <button className="line-btn" onClick={() => void prev()} aria-label="Previous"><Icon name="prev" /></button>
+            <button className="line-btn play-line" onClick={() => void togglePlay()} aria-label="Play Pause"><Icon name={isPlaying ? "pause" : "play"} /></button>
+            <button className="line-btn" onClick={() => void next()} aria-label="Next"><Icon name="next" /></button>
+            <span className="track-label" aria-live="polite">
+              {currentTrack ? `Track ${(trackIndex + 1).toString().padStart(2, "0")}` : "Track --"}
+            </span>
           </div>
           <div className="seek-row">
             <span>{fmt(elapsed)}</span>

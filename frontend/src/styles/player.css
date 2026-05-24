@@ -510,7 +510,7 @@ body {
 .deck-top {
   grid-column: 1;
   grid-row: 1;
-  align-self: center;
+  align-self: start;
   justify-self: center;
   pointer-events: auto;
 }
@@ -698,9 +698,31 @@ body {
   pointer-events: auto;
 }
 
+.bottom-transport {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 8px 0;
+}
+
+.bottom-transport svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bottom-transport .play-line svg {
+  fill: currentColor;
+  stroke: none;
+}
+
 .track-label {
   width: 170px;
-  margin: 0 0 8px 54px;
+  margin-left: 8px;
   color: #f0f4ff;
   font-size: 0.78rem;
   font-weight: 700;
@@ -1284,7 +1306,7 @@ body {
   .deck-top {
     grid-column: 1;
     grid-row: 1;
-    align-self: center;
+    align-self: start;
     justify-self: center;
     pointer-events: auto;
   }
