@@ -87,7 +87,7 @@ type CustomDiscCover = {
   rotate: number;
 };
 
-type CoverEditorMode = "disc" | "back";
+type CoverEditorMode = "disc" | "front" | "back";
 
 type BatchTarget = {
   album: Album;
@@ -103,13 +103,19 @@ type CastWindow = Window & {
 };
 
 const DISC_COVER_STORAGE_KEY = "cd-player-custom-disc-covers-v1";
+const FRONT_COVER_STORAGE_KEY = "albumdeck-custom-front-covers-v1";
 const BACK_COVER_STORAGE_KEY = "albumdeck-custom-back-covers-v1";
+const FRONT_COVER_REMOTE_PREFIX = "__frontcover__:";
 const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.42";
+const APP_VERSION = "v0.3.43";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
+
+function frontCoverKey(albumId: string): string {
+  return `${FRONT_COVER_REMOTE_PREFIX}${albumId}`;
+}
 
 function backCoverKey(albumId: string): string {
   return `${BACK_COVER_REMOTE_PREFIX}${albumId}`;
@@ -117,24 +123,46 @@ function backCoverKey(albumId: string): string {
 
 function splitCoverMaps(covers: Record<string, CustomDiscCover>) {
   const disc: Record<string, CustomDiscCover> = {};
+  const front: Record<string, CustomDiscCover> = {};
   const back: Record<string, CustomDiscCover> = {};
   Object.entries(covers).forEach(([key, value]) => {
     if (!value?.source) return;
-    if (key.startsWith(BACK_COVER_REMOTE_PREFIX)) {
+    if (key.startsWith(FRONT_COVER_REMOTE_PREFIX)) {
+      front[key.slice(FRONT_COVER_REMOTE_PREFIX.length)] = value;
+    } else if (key.startsWith(BACK_COVER_REMOTE_PREFIX)) {
       back[key.slice(BACK_COVER_REMOTE_PREFIX.length)] = value;
     } else {
       disc[key] = value;
     }
   });
-  return { disc, back };
+  return { disc, front, back };
 }
 
-function joinCoverMaps(disc: Record<string, CustomDiscCover>, back: Record<string, CustomDiscCover>) {
+function joinCoverMaps(disc: Record<string, CustomDiscCover>, front: Record<string, CustomDiscCover>, back: Record<string, CustomDiscCover>) {
   const merged: Record<string, CustomDiscCover> = { ...disc };
+  Object.entries(front).forEach(([albumId, value]) => {
+    merged[frontCoverKey(albumId)] = value;
+  });
   Object.entries(back).forEach(([albumId, value]) => {
     merged[backCoverKey(albumId)] = value;
   });
   return merged;
+}
+
+function resolveStoredCoverSource(source: string, fallback: string) {
+  if (!source) return fallback;
+  if (source.startsWith("data:")) return source;
+  if (/^https?:\/\//i.test(source)) {
+    try {
+      const host = new URL(source).hostname.toLowerCase();
+      const isDiscogsImageHost = ["i.discogs.com", "img.discogs.com", "api-img.discogs.com"].includes(host);
+      const isLikelyImage = /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(source) || isDiscogsImageHost;
+      return isLikelyImage ? proxyImageUrl(source) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return source;
 }
 
 function discSpinSeconds(speedValue: number): number {
@@ -182,6 +210,7 @@ export default function App() {
   const [caseOverlaySrc, setCaseOverlaySrc] = useState("/CDALBUM.webp");
   const [trackListAnim, setTrackListAnim] = useState<"up" | "down" | "">("");
   const [discCoverByAlbum, setDiscCoverByAlbum] = useState<Record<string, CustomDiscCover>>({});
+  const [frontCoverByAlbum, setFrontCoverByAlbum] = useState<Record<string, CustomDiscCover>>({});
   const [backCoverByAlbum, setBackCoverByAlbum] = useState<Record<string, CustomDiscCover>>({});
   const [coverEditorOpen, setCoverEditorOpen] = useState(false);
   const [coverEditorMode, setCoverEditorMode] = useState<CoverEditorMode>("disc");
@@ -227,7 +256,7 @@ export default function App() {
   const [adminBusy, setAdminBusy] = useState(false);
   const [batchActive, setBatchActive] = useState(false);
   const [batchSkipped, setBatchSkipped] = useState<Set<string>>(() => new Set());
-  const [editorDrafts, setEditorDrafts] = useState<CoverDrafts>({ disc: EMPTY_COVER_DRAFT, back: EMPTY_COVER_DRAFT });
+  const [editorDrafts, setEditorDrafts] = useState<CoverDrafts>({ disc: EMPTY_COVER_DRAFT, front: EMPTY_COVER_DRAFT, back: EMPTY_COVER_DRAFT });
 
   const coverTimersRef = useRef<number[]>([]);
 
@@ -276,6 +305,7 @@ export default function App() {
     return tracks.slice(start, start + maxVisible).map((song, idx) => ({ song, absoluteIndex: start + idx }));
   }, [tracks, trackIndex]);
   const currentCustomDisc = selectedAlbum ? discCoverByAlbum[selectedAlbum.id] : undefined;
+  const currentCustomFront = selectedAlbum ? frontCoverByAlbum[selectedAlbum.id] : undefined;
   const artistLetters = useMemo(() => {
     const letters = new Set<string>();
     albums.forEach((a) => {
@@ -333,11 +363,16 @@ export default function App() {
     if (!authStatus?.authenticated) return;
     const loadCovers = async () => {
       let localDisc: Record<string, CustomDiscCover> = {};
+      let localFront: Record<string, CustomDiscCover> = {};
       let localBack: Record<string, CustomDiscCover> = {};
       try {
         const raw = localStorage.getItem(DISC_COVER_STORAGE_KEY);
         if (raw) {
           localDisc = JSON.parse(raw) as Record<string, CustomDiscCover>;
+        }
+        const frontRaw = localStorage.getItem(FRONT_COVER_STORAGE_KEY);
+        if (frontRaw) {
+          localFront = JSON.parse(frontRaw) as Record<string, CustomDiscCover>;
         }
         const backRaw = localStorage.getItem(BACK_COVER_STORAGE_KEY);
         if (backRaw) {
@@ -345,6 +380,7 @@ export default function App() {
         }
       } catch {
         localDisc = {};
+        localFront = {};
         localBack = {};
       }
 
@@ -352,16 +388,19 @@ export default function App() {
         const remote = await fetchCustomDiscCovers<Record<string, CustomDiscCover>>();
         const remoteSplit = splitCoverMaps(remote ?? {});
         const mergedDisc = { ...localDisc, ...remoteSplit.disc };
+        const mergedFront = { ...localFront, ...remoteSplit.front };
         const mergedBack = { ...localBack, ...remoteSplit.back };
         setDiscCoverByAlbum(mergedDisc);
+        setFrontCoverByAlbum(mergedFront);
         setBackCoverByAlbum(mergedBack);
-        if (Object.keys(localDisc).length > 0 || Object.keys(localBack).length > 0) {
-          void saveCustomDiscCovers(joinCoverMaps(mergedDisc, mergedBack)).catch(() => {
+        if (Object.keys(localDisc).length > 0 || Object.keys(localFront).length > 0 || Object.keys(localBack).length > 0) {
+          void saveCustomDiscCovers(joinCoverMaps(mergedDisc, mergedFront, mergedBack)).catch(() => {
             // keep local fallback
           });
         }
       } catch {
         setDiscCoverByAlbum(localDisc);
+        setFrontCoverByAlbum(localFront);
         setBackCoverByAlbum(localBack);
       } finally {
         setCoversLoaded(true);
@@ -373,8 +412,9 @@ export default function App() {
   useEffect(() => {
     if (!coversLoaded) return;
     localStorage.setItem(DISC_COVER_STORAGE_KEY, JSON.stringify(discCoverByAlbum));
+    localStorage.setItem(FRONT_COVER_STORAGE_KEY, JSON.stringify(frontCoverByAlbum));
     localStorage.setItem(BACK_COVER_STORAGE_KEY, JSON.stringify(backCoverByAlbum));
-  }, [discCoverByAlbum, backCoverByAlbum, coversLoaded]);
+  }, [discCoverByAlbum, frontCoverByAlbum, backCoverByAlbum, coversLoaded]);
 
   useEffect(() => {
     localStorage.setItem(LOAD_SOUNDS_STORAGE_KEY, String(loadSoundsEnabled));
@@ -758,6 +798,10 @@ export default function App() {
       if (!firstSong) return;
       const normalizedCover = await getNormalizedCover(detail.coverArt ?? album.coverArt);
       if (transitionTokenRef.current !== token) return;
+      const frontOverride = frontCoverByAlbum[album.id];
+      const displayStackCover = frontOverride?.source
+        ? resolveStoredCoverSource(frontOverride.source, normalizedCover)
+        : normalizedCover;
 
       setMenuOpen(false);
       setElapsed(0);
@@ -772,7 +816,7 @@ export default function App() {
         setTracks(songs);
         setTrackIndex(0);
         setCurrentCoverSrc(normalizedCover);
-        placeCoverOnStack(normalizedCover);
+        placeCoverOnStack(displayStackCover);
         setIsDiscFlipped(false);
         setIsFastSpin(false);
         setIsTrayClosing(false);
@@ -794,7 +838,7 @@ export default function App() {
       setTracks(songs);
       setTrackIndex(0);
       setCurrentCoverSrc(normalizedCover);
-      placeCoverOnStack(normalizedCover);
+      placeCoverOnStack(displayStackCover);
       setIsDiscFlipped(false);
       if (loadSoundsEnabled) {
         await ensureAudioReady(doorRef.current);
@@ -1018,7 +1062,10 @@ export default function App() {
   const art = topCover?.src ?? currentCoverSrc ?? coverUrl(selectedAlbum?.coverArt);
   const hasDiscArt = Boolean(topCover || selectedAlbum);
   const currentCustomBack = selectedAlbum ? backCoverByAlbum[selectedAlbum.id] : undefined;
-  const displayCoverSrc = topCover?.src ?? currentCoverSrc ?? (selectedAlbum ? coverUrl(selectedAlbum.coverArt) : null);
+  const frontFallbackSrc = topCover?.src ?? currentCoverSrc ?? (selectedAlbum ? coverUrl(selectedAlbum.coverArt) : null);
+  const displayCoverSrc = currentCustomFront?.source
+    ? resolveStoredCoverSource(currentCustomFront.source, frontFallbackSrc ?? "")
+    : frontFallbackSrc;
   const backImageSource = currentCustomBack ? resolveEditorPreviewSource(currentCustomBack.source) : displayCoverSrc;
   const backImageStyle = currentCustomBack
     ? {
@@ -1054,6 +1101,7 @@ export default function App() {
   const openCoverEditorFor = (album: Album, mode: CoverEditorMode = "disc") => {
     const drafts = {
       disc: discCoverByAlbum[album.id] ?? EMPTY_COVER_DRAFT,
+      front: frontCoverByAlbum[album.id] ?? EMPTY_COVER_DRAFT,
       back: backCoverByAlbum[album.id] ?? EMPTY_COVER_DRAFT
     };
     setCoverEditorMode(mode);
@@ -1190,16 +1238,7 @@ export default function App() {
   };
 
   function resolveEditorPreviewSource(source: string) {
-    if (!source) return art;
-    if (source.startsWith("data:")) return source;
-    if (/^https?:\/\//i.test(source)) {
-      const host = new URL(source).hostname.toLowerCase();
-      const isDiscogsImageHost = ["i.discogs.com", "img.discogs.com", "api-img.discogs.com"].includes(host);
-      const isLikelyImage = /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(source) || isDiscogsImageHost;
-      if (!isLikelyImage) return art;
-      return proxyImageUrl(source);
-    }
-    return source;
+    return resolveStoredCoverSource(source, art);
   }
 
   const saveEditorCover = () => {
@@ -1207,6 +1246,7 @@ export default function App() {
     const albumId = selectedAlbum.id;
     const drafts = { ...editorDrafts, [coverEditorMode]: currentEditorDraft() };
     const discDraft = { ...drafts.disc, source: drafts.disc.source.trim() };
+    const frontDraft = { ...drafts.front, source: drafts.front.source.trim() };
     const backDraft = { ...drafts.back, source: drafts.back.source.trim() };
 
     if (batchActive && !drafts[coverEditorMode].source.trim()) {
@@ -1215,20 +1255,26 @@ export default function App() {
     }
 
     const nextDisc = { ...discCoverByAlbum };
+    const nextFront = { ...frontCoverByAlbum };
     const nextBack = { ...backCoverByAlbum };
 
     if (discDraft.source) nextDisc[albumId] = discDraft;
     else delete nextDisc[albumId];
 
+    if (frontDraft.source) nextFront[albumId] = frontDraft;
+    else delete nextFront[albumId];
+
     if (backDraft.source) nextBack[albumId] = backDraft;
     else delete nextBack[albumId];
 
     setDiscCoverByAlbum(nextDisc);
+    setFrontCoverByAlbum(nextFront);
     setBackCoverByAlbum(nextBack);
-    setEditorDrafts({ disc: discDraft, back: backDraft });
+    setEditorDrafts({ disc: discDraft, front: frontDraft, back: backDraft });
 
     void Promise.all([
       discDraft.source ? saveCustomDiscCover(albumId, discDraft) : deleteCustomDiscCover(albumId),
+      frontDraft.source ? saveCustomDiscCover(frontCoverKey(albumId), frontDraft) : deleteCustomDiscCover(frontCoverKey(albumId)),
       backDraft.source ? saveCustomDiscCover(backCoverKey(albumId), backDraft) : deleteCustomDiscCover(backCoverKey(albumId))
     ]).catch((e) => {
       setError(e instanceof Error ? e.message : "Could not save covers");
@@ -1607,7 +1653,7 @@ export default function App() {
             <div className="menu-head">
               <h2>
                 {batchActive ? "Batch: " : ""}
-                {coverEditorMode === "back" ? "Set sleeve back" : "Set CD artwork"}: {selectedAlbum.name}
+                {coverEditorMode === "back" ? "Set sleeve back" : coverEditorMode === "front" ? "Set sleeve front" : "Set CD artwork"}: {selectedAlbum.name}
               </h2>
               <div className="menu-actions">
                 {batchActive ? (
@@ -1625,7 +1671,7 @@ export default function App() {
             </div>
             {batchActive ? (
               <p className="batch-note">
-                Save stores both CD and Back for this album. Skip leaves this item unchanged and moves on.
+                Save stores CD, Front, and Back for this album. Skip leaves this item unchanged and moves on.
               </p>
             ) : null}
             <div className="cd-editor-grid">
@@ -1638,6 +1684,14 @@ export default function App() {
                     onClick={() => switchCoverEditorMode("disc")}
                   >
                     CD
+                  </button>
+                  <button
+                    className={coverEditorMode === "front" ? "active" : ""}
+                    role="tab"
+                    aria-selected={coverEditorMode === "front"}
+                    onClick={() => switchCoverEditorMode("front")}
+                  >
+                    Front
                   </button>
                   <button
                     className={coverEditorMode === "back" ? "active" : ""}
@@ -1745,7 +1799,17 @@ export default function App() {
                 </div>
               </div>
               <div className="cd-editor-preview">
-                {coverEditorMode === "back" ? (
+                {coverEditorMode === "front" ? (
+                  <div className="front-cover-preview">
+                    <img
+                      src={resolveEditorPreviewSource(coverSourceInput)}
+                      className="front-cover-art"
+                      style={{ transform: `translate(${editorX}px, ${editorY}px) scale(${editorZoom}) rotate(${editorRotate}deg)` }}
+                      alt="Front cover preview"
+                    />
+                    <img src={caseOverlaySrc} className="front-cover-overlay" alt="" aria-hidden="true" />
+                  </div>
+                ) : coverEditorMode === "back" ? (
                   <div className="back-cover-preview">
                     <div className="back-cover-frame">
                       <img src="/backcover.png" className="back-cover-template" alt="" aria-hidden="true" />
