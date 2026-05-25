@@ -103,6 +103,11 @@ export async function fetchCastStreamUrl(songId: string): Promise<string> {
   return data.url;
 }
 
+export async function fetchCastAssetUrl(fileName: string): Promise<string> {
+  const data = await apiGet<{ url: string }>(`/cast-asset/${encodeURIComponent(fileName)}`);
+  return data.url;
+}
+
 export function proxyImageUrl(url: string): string {
   return `${API_BASE}/image-proxy?url=${encodeURIComponent(url)}`;
 }

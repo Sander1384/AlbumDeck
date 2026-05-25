@@ -130,12 +130,16 @@ function createCastStreamPath(songId: string) {
 
 function createCastStreamUrl(req: express.Request, songId: string) {
   const streamPath = createCastStreamPath(songId);
-  if (CAST_PUBLIC_URL) return new URL(streamPath, `${CAST_PUBLIC_URL}/`).toString();
+  return createPublicUrl(req, streamPath);
+}
+
+function createPublicUrl(req: express.Request, publicPath: string) {
+  if (CAST_PUBLIC_URL) return new URL(publicPath, `${CAST_PUBLIC_URL}/`).toString();
 
   const proto = typeof req.headers["x-forwarded-proto"] === "string" ? req.headers["x-forwarded-proto"].split(",")[0].trim() : req.protocol;
   const host = typeof req.headers["x-forwarded-host"] === "string" ? req.headers["x-forwarded-host"].split(",")[0].trim() : req.get("host");
-  if (!host) return streamPath;
-  return `${proto}://${host}${streamPath}`;
+  if (!host) return publicPath;
+  return `${proto}://${host}${publicPath}`;
 }
 
 function validateCastStreamRequest(req: express.Request) {
@@ -481,6 +485,15 @@ app.get("/api/stream/:songId", async (req, res) => {
 
 app.get("/api/cast-url/:songId", (req, res) => {
   res.json({ url: createCastStreamUrl(req, String(req.params.songId)), expiresIn: CAST_URL_TTL_SECONDS });
+});
+
+app.get("/api/cast-asset/:fileName", (req, res) => {
+  const fileName = String(req.params.fileName);
+  if (!["door.mp3", "draai.mp3"].includes(fileName)) {
+    res.status(404).json({ error: "Unknown Cast asset" });
+    return;
+  }
+  res.json({ url: createPublicUrl(req, `/${fileName}`) });
 });
 
 async function pipeNavidromeStream(

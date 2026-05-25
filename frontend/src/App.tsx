@@ -4,6 +4,7 @@ import {
   fetchAuthStatus,
   fetchAlbum,
   fetchAlbums,
+  fetchCastAssetUrl,
   fetchCastStreamUrl,
   fetchCustomDiscCovers,
   deleteCustomDiscCover,
@@ -110,7 +111,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 100;
-const APP_VERSION = "v0.3.43";
+const APP_VERSION = "v0.3.44";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function frontCoverKey(albumId: string): string {
@@ -637,6 +638,73 @@ export default function App() {
     castProgressTimerRef.current = window.setInterval(() => syncCastMediaState(), 500);
   };
 
+  const stopCastMedia = async (markStopped = true) => {
+    const media = castMediaRef.current ?? castSessionRef.current?.getMediaSession?.();
+    if (media?.stop) {
+      await new Promise<void>((resolve, reject) => {
+        const done = () => resolve();
+        const fail = (err: unknown) => reject(err instanceof Error ? err : new Error("Cast stop failed"));
+        media.stop(null, done, fail);
+      }).catch((err) => setError(castErrorMessage(err, "Could not stop Cast media")));
+    }
+    stopCastProgressSync();
+    castStoppedRef.current = markStopped;
+    castMediaRef.current = null;
+    setIsPlaying(false);
+    setElapsed(0);
+  };
+
+  const waitForCastMediaEnd = async (media: any, fallbackMs: number) => {
+    await new Promise<void>((resolve) => {
+      let resolved = false;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      const timeout = window.setTimeout(finish, Math.max(800, fallbackMs + 700));
+      if (!media?.addUpdateListener) {
+        return;
+      }
+      media.addUpdateListener(() => {
+        const win = window as CastWindow;
+        if (!win.chrome?.cast) return;
+        if (
+          media.playerState === win.chrome.cast.media.PlayerState.IDLE &&
+          media.idleReason === win.chrome.cast.media.IdleReason.FINISHED
+        ) {
+          finish();
+        }
+      });
+    });
+  };
+
+  const castLoadSound = async (fileName: "door.mp3" | "draai.mp3", title: string, fallbackMs: number) => {
+    const win = window as CastWindow;
+    const session = castSessionRef.current;
+    if (!session || !win.chrome?.cast) return;
+
+    stopCastProgressSync();
+    const mediaUrl = absoluteUrl(await fetchCastAssetUrl(fileName));
+    const mediaInfo = new win.chrome.cast.media.MediaInfo(mediaUrl, "audio/mpeg");
+    mediaInfo.contentUrl = mediaUrl;
+    mediaInfo.entity = mediaUrl;
+    mediaInfo.streamType = win.chrome.cast.media.StreamType.BUFFERED;
+    const metadata = new win.chrome.cast.media.MusicTrackMediaMetadata();
+    metadata.title = title;
+    mediaInfo.metadata = metadata;
+
+    const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
+    request.autoplay = true;
+    const media = await session.loadMedia(request);
+    castMediaRef.current = media;
+    castStoppedRef.current = false;
+    setIsPlaying(false);
+    setElapsed(0);
+    await waitForCastMediaEnd(media, fallbackMs);
+  };
+
   const loadCastMedia = async (song: Song, startAt = 0) => {
     const win = window as CastWindow;
     const session = castSessionRef.current;
@@ -697,19 +765,7 @@ export default function App() {
 
   const stopPlayback = async () => {
     if (isCastingRef.current) {
-      const media = castMediaRef.current ?? castSessionRef.current?.getMediaSession?.();
-      if (media?.stop) {
-        await new Promise<void>((resolve, reject) => {
-          const done = () => resolve();
-          const fail = (err: unknown) => reject(err instanceof Error ? err : new Error("Cast stop failed"));
-          media.stop(null, done, fail);
-        }).catch((err) => setError(castErrorMessage(err, "Could not stop Cast media")));
-      }
-      stopCastProgressSync();
-      castStoppedRef.current = true;
-      castMediaRef.current = null;
-      setIsPlaying(false);
-      setElapsed(0);
+      await stopCastMedia(true);
       return;
     }
 
@@ -832,6 +888,9 @@ export default function App() {
         main.pause();
         main.volume = 1;
       }
+      if (isCastingRef.current && castSessionRef.current) {
+        await stopCastMedia(false);
+      }
       setIsPlaying(false);
       setIsFastSpin(false);
       setSelectedAlbum(album);
@@ -844,14 +903,19 @@ export default function App() {
         await ensureAudioReady(doorRef.current);
       }
       const closeMs = loadSoundsEnabled ? getAudioDurationMs(doorRef.current, 4000) : 4000;
+      const castLoadSounds = Boolean(loadSoundsEnabled && isCastingRef.current && castSessionRef.current);
       setTrayMs(closeMs);
       setIsTrayClosing(true);
-      if (loadSoundsEnabled && doorRef.current) {
+      if (castLoadSounds) {
+        await castLoadSound("door.mp3", "AlbumDeck tray", closeMs);
+      } else if (loadSoundsEnabled && doorRef.current) {
         doorRef.current.currentTime = 0;
         doorRef.current.volume = 1;
         void doorRef.current.play();
       }
-      await new Promise((resolve) => window.setTimeout(resolve, closeMs));
+      if (!castLoadSounds) {
+        await new Promise((resolve) => window.setTimeout(resolve, closeMs));
+      }
       if (transitionTokenRef.current !== token) return;
       setIsTrayClosing(false);
       await new Promise((resolve) => window.setTimeout(resolve, 500));
@@ -861,12 +925,6 @@ export default function App() {
         await ensureAudioReady(spinRef.current);
       }
       const spinMs = loadSoundsEnabled ? getAudioDurationMs(spinRef.current, 1400) : 1400;
-      if (loadSoundsEnabled && spinRef.current) {
-        spinRef.current.currentTime = 0;
-        spinRef.current.volume = 1;
-        void spinRef.current.play();
-      }
-
       setIsFastSpin(true);
       window.setTimeout(() => {
         if (transitionTokenRef.current === token) {
@@ -874,7 +932,17 @@ export default function App() {
         }
       }, Math.max(0, spinMs - 350));
 
-      await new Promise((resolve) => window.setTimeout(resolve, spinMs));
+      if (castLoadSounds) {
+        await castLoadSound("draai.mp3", "AlbumDeck spin", spinMs);
+      } else if (loadSoundsEnabled && spinRef.current) {
+        spinRef.current.currentTime = 0;
+        spinRef.current.volume = 1;
+        void spinRef.current.play();
+      }
+
+      if (!castLoadSounds) {
+        await new Promise((resolve) => window.setTimeout(resolve, spinMs));
+      }
       if (transitionTokenRef.current !== token) return;
 
       await playTrackImmediate(firstSong);
