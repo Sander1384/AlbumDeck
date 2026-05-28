@@ -55,7 +55,7 @@ Before deploying, set:
 The Portainer example is pinned to:
 
 ```text
-ghcr.io/sander1384/albumdeck:v0.3.46
+ghcr.io/sander1384/albumdeck:v0.3.47
 ```
 
 After deploying, open:
@@ -148,7 +148,7 @@ Tags:
 
 - `latest` and `main` are published from the `main` branch.
 - `vX.Y.Z` tags publish versioned images.
-- The compose examples are pinned to `v0.3.46` so new deployments do not accidentally pull an older cached image.
+- The compose examples are pinned to `v0.3.47` so new deployments do not accidentally pull an older cached image.
 
 ## Privacy Notes
 

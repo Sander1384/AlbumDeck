@@ -29,7 +29,6 @@ const CAST_TOKEN_SECRET =
   process.env.CAST_TOKEN_SECRET?.trim() ||
   crypto.createHash("sha256").update(`${NAVIDROME_URL}:${NAVIDROME_USER}:${NAVIDROME_PASS}`).digest("hex");
 let customCoverWriteQueue: Promise<void> = Promise.resolve();
-const activeSessions = new Set<string>();
 
 if (!NAVIDROME_URL || !NAVIDROME_USER || !NAVIDROME_PASS) {
   throw new Error("Missing NAVIDROME_URL/NAVIDROME_USER/NAVIDROME_PASS in environment");
@@ -92,7 +91,11 @@ function parseCookies(header?: string): Record<string, string> {
   return Object.fromEntries(
     header.split(";").map((part) => {
       const [key, ...rest] = part.trim().split("=");
-      return [key, decodeURIComponent(rest.join("="))];
+      try {
+        return [key, decodeURIComponent(rest.join("="))];
+      } catch {
+        return [key, rest.join("=")];
+      }
     }).filter(([key]) => Boolean(key))
   );
 }
@@ -102,14 +105,41 @@ function sessionCookieOptions(req: express.Request) {
   return `HttpOnly; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}${isSecure ? "; Secure" : ""}`;
 }
 
-function createSession(res: express.Response, req: express.Request) {
-  const token = crypto.randomBytes(32).toString("hex");
-  activeSessions.add(token);
+function sessionSecret(auth: AuthConfig) {
+  return crypto.createHash("sha256").update(`${CAST_TOKEN_SECRET}:${auth.salt}:${auth.passwordHash}`).digest("hex");
+}
+
+function signSessionPayload(payload: string, auth: AuthConfig) {
+  return crypto.createHmac("sha256", sessionSecret(auth)).update(payload).digest("hex");
+}
+
+function createSession(res: express.Response, req: express.Request, auth: AuthConfig) {
+  const payload = Buffer.from(JSON.stringify({
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+    nonce: crypto.randomBytes(16).toString("hex")
+  })).toString("base64url");
+  const token = `v1.${payload}.${signSessionPayload(payload, auth)}`;
   res.setHeader("set-cookie", `albumdeck_session=${encodeURIComponent(token)}; ${sessionCookieOptions(req)}`);
 }
 
 function clearSession(res: express.Response) {
   res.setHeader("set-cookie", "albumdeck_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0");
+}
+
+function verifySession(token: string | undefined, auth: AuthConfig) {
+  if (!token?.startsWith("v1.")) return false;
+  const [, payload, signature] = token.split(".");
+  if (!payload || !/^[a-f0-9]{64}$/i.test(signature ?? "")) return false;
+  const expected = signSessionPayload(payload, auth);
+  if (!timingSafeTextEqual(signature, expected)) return false;
+
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: unknown };
+    const exp = Number(parsed.exp);
+    return Number.isFinite(exp) && exp > Math.floor(Date.now() / 1000);
+  } catch {
+    return false;
+  }
 }
 
 function castSignature(songId: string, expires: number) {
@@ -157,7 +187,7 @@ async function isAuthenticated(req: express.Request) {
   const token = parseCookies(req.headers.cookie).albumdeck_session;
   return {
     configured: true,
-    authenticated: Boolean(token && activeSessions.has(token)),
+    authenticated: verifySession(token, auth),
     username: auth.username
   };
 }
@@ -348,7 +378,7 @@ app.post("/api/auth/setup", async (req, res) => {
       return;
     }
     const auth = await writeAuthConfig(username, password);
-    createSession(res, req);
+    createSession(res, req, auth);
     res.json({ configured: true, authenticated: true, username: auth.username });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Setup failed" });
@@ -368,7 +398,7 @@ app.post("/api/auth/login", async (req, res) => {
       res.status(401).json({ error: "Invalid username or password" });
       return;
     }
-    createSession(res, req);
+    createSession(res, req, auth);
     res.json({ configured: true, authenticated: true, username: auth.username });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Login failed" });
@@ -376,8 +406,6 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.post("/api/auth/logout", (req, res) => {
-  const token = parseCookies(req.headers.cookie).albumdeck_session;
-  if (token) activeSessions.delete(token);
   clearSession(res);
   res.json({ ok: true });
 });
@@ -405,8 +433,7 @@ app.put("/api/auth/admin", requireAuth, async (req, res) => {
       return;
     }
     const next = await writeAuthConfig(username, password || currentPassword);
-    activeSessions.clear();
-    createSession(res, req);
+    createSession(res, req, next);
     res.json({ configured: true, authenticated: true, username: next.username });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Could not update admin" });

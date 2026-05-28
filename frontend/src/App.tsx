@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ApiError,
   coverUrl,
   fetchAuthStatus,
   fetchAlbum,
@@ -113,7 +114,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 50;
-const APP_VERSION = "v0.3.46";
+const APP_VERSION = "v0.3.47";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function frontCoverKey(albumId: string): string {
@@ -355,6 +356,20 @@ export default function App() {
     setAuthMode(state.configured ? "login" : "setup");
     setAdminUsername(state.username ?? "");
     return state;
+  };
+
+  const handleAuthExpired = async (error: unknown) => {
+    if (!(error instanceof ApiError) || error.status !== 401) return false;
+    const state = await refreshAuth().catch(() => ({ configured: true, authenticated: false } as AuthStatus));
+    setAuthStatus({ ...state, authenticated: false });
+    setAlbums([]);
+    setTracks([]);
+    setTrackIndex(0);
+    setSelectedAlbum(null);
+    setElapsed(0);
+    setIsPlaying(false);
+    setError(null);
+    return true;
   };
 
   useEffect(() => {
@@ -1056,6 +1071,7 @@ export default function App() {
         const loaded = await fetchAlbums();
         setAlbums(loaded);
       } catch (e) {
+        if (await handleAuthExpired(e)) return;
         setError(e instanceof Error ? e.message : "Could not load albums");
       }
     };

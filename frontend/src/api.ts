@@ -40,12 +40,22 @@ export type AuthStatus = {
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 const COVER_SIZE = Number((import.meta.env.VITE_COVER_SIZE as string | undefined) ?? 1200);
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function responseError(response: Response): Promise<Error> {
   try {
     const payload = (await response.json()) as { error?: string };
-    return new Error(payload.error ?? `API error ${response.status}`);
+    return new ApiError(payload.error ?? `API error ${response.status}`, response.status);
   } catch {
-    return new Error(`API error ${response.status}`);
+    return new ApiError(`API error ${response.status}`, response.status);
   }
 }
 
