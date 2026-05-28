@@ -1,3 +1,9 @@
+@font-face {
+  font-family: "LCDDot";
+  src: url("/lcddot_tr.ttf") format("truetype");
+  font-display: swap;
+}
+
 :root {
   --bg0: #090b15;
   --bg1: #10182f;
@@ -745,9 +751,11 @@ body {
   min-height: 22px;
   margin: 0 52px 8px;
   color: #d9e3ff;
-  font-size: clamp(0.82rem, 1.2vw, 1rem);
-  font-weight: 650;
+  font-family: "LCDDot", "Avenir Next", "Segoe UI", sans-serif;
+  font-size: clamp(1rem, 1.65vw, 1.35rem);
+  font-weight: 400;
   line-height: 1.2;
+  letter-spacing: 0.04em;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;

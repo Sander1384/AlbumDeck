@@ -62,7 +62,7 @@ function castErrorMessage(error: unknown, fallback: string): string {
   return text && text !== "[object Object]" ? text : fallback;
 }
 
-type IconName = "menu" | "close" | "admin" | "logout" | "prev" | "play" | "pause" | "stop" | "next" | "sound" | "soundOff" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
+type IconName = "menu" | "close" | "admin" | "logout" | "prev" | "play" | "pause" | "stop" | "next" | "sound" | "soundOff" | "lyrics" | "fullscreen" | "fullscreenExit" | "cast" | "speed" | "image";
 
 function Icon({ name }: { name: IconName }) {
   if (name === "menu") return <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
@@ -73,6 +73,7 @@ function Icon({ name }: { name: IconName }) {
   if (name === "next") return <svg viewBox="0 0 24 24"><path d="M17 6v12M6 7l8 5-8 5z" /></svg>;
   if (name === "sound") return <svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4zM17 9a5 5 0 0 1 0 6M19.5 6.5a8.5 8.5 0 0 1 0 11" /></svg>;
   if (name === "soundOff") return <svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4zM16 9l5 6M21 9l-5 6" /></svg>;
+  if (name === "lyrics") return <svg viewBox="0 0 24 24"><path d="M5 6h14M5 10h10M5 14h14M5 18h8" /></svg>;
   if (name === "fullscreen") return <svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" /></svg>;
   if (name === "fullscreenExit") return <svg viewBox="0 0 24 24"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" /></svg>;
   if (name === "cast") return <svg viewBox="0 0 24 24"><path d="M4 6h16v11H4zM4 18h.01M4 14a4 4 0 0 1 4 4M4 10a8 8 0 0 1 8 8" /></svg>;
@@ -112,9 +113,10 @@ const BACK_COVER_STORAGE_KEY = "albumdeck-custom-back-covers-v1";
 const FRONT_COVER_REMOTE_PREFIX = "__frontcover__:";
 const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
+const LYRICS_STORAGE_KEY = "albumdeck-lyrics-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 50;
-const APP_VERSION = "v0.3.48";
+const APP_VERSION = "v0.3.49";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function frontCoverKey(albumId: string): string {
@@ -246,6 +248,14 @@ export default function App() {
       return true;
     }
   });
+  const [lyricsEnabled, setLyricsEnabled] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem(LYRICS_STORAGE_KEY);
+      return raw === null ? true : raw === "true";
+    } catch {
+      return true;
+    }
+  });
   const [discSpeed, setDiscSpeed] = useState<number>(DISC_SPEED_DEFAULT);
   const [speedPanelOpen, setSpeedPanelOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -273,7 +283,7 @@ export default function App() {
   const total = currentTrack?.duration ?? 0;
   const progress = useMemo(() => (total > 0 ? (elapsed / total) * 100 : 0), [elapsed, total]);
   const currentLyric = useMemo(() => {
-    if (!currentTrack) return "";
+    if (!lyricsEnabled || !currentTrack) return "";
     if (!lyrics.length) return lyricsChecked ? "No lyrics found for this track" : "";
     let active = lyrics[0];
     for (const line of lyrics) {
@@ -282,7 +292,7 @@ export default function App() {
       else break;
     }
     return active.text;
-  }, [currentTrack, elapsed, lyrics, lyricsChecked]);
+  }, [currentTrack, elapsed, lyrics, lyricsChecked, lyricsEnabled]);
 
   useEffect(() => {
     if (!isPlaying && !isCasting) return;
@@ -484,6 +494,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(LOAD_SOUNDS_STORAGE_KEY, String(loadSoundsEnabled));
   }, [loadSoundsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(LYRICS_STORAGE_KEY, String(lyricsEnabled));
+  }, [lyricsEnabled]);
 
   useEffect(() => {
     localStorage.removeItem(DISC_SPEED_STORAGE_KEY);
@@ -1739,6 +1753,14 @@ export default function App() {
               <Icon name={loadSoundsEnabled ? "sound" : "soundOff"} />
             </button>
             <button
+              className={`line-btn ghost-line ${lyricsEnabled ? "active-line" : ""}`}
+              onClick={() => setLyricsEnabled((v) => !v)}
+              aria-label={lyricsEnabled ? "Hide lyrics" : "Show lyrics"}
+              title={lyricsEnabled ? "Lyrics on" : "Lyrics off"}
+            >
+              <Icon name="lyrics" />
+            </button>
+            <button
               className="line-btn ghost-line"
               onClick={() => void toggleFullscreen()}
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -1776,9 +1798,11 @@ export default function App() {
               {currentTrack ? `Track ${(trackIndex + 1).toString().padStart(2, "0")}` : "Track --"}
             </span>
           </div>
-          <div className="lyric-line" aria-live="polite">
-            {currentLyric}
-          </div>
+          {lyricsEnabled ? (
+            <div className="lyric-line" aria-live="polite">
+              {currentLyric}
+            </div>
+          ) : null}
           <div className="seek-row">
             <span>{fmt(elapsed)}</span>
             <input
