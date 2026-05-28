@@ -741,6 +741,20 @@ body {
   text-transform: uppercase;
 }
 
+.lyric-line {
+  min-height: 22px;
+  margin: 0 52px 8px;
+  color: #f2f5ff;
+  font-size: clamp(0.82rem, 1.2vw, 1rem);
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 14px rgba(10, 16, 33, 0.8);
+}
+
 .seek-row {
   display: grid;
   grid-template-columns: 46px 1fr 46px;

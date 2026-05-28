@@ -14,6 +14,7 @@ AlbumDeck is a kiosk-friendly CD-style web player for Navidrome. It shows a larg
 - Optional Discogs search for custom CD and sleeve-back artwork.
 - Persistent custom artwork in `/app/.data/custom-disc-covers.json`.
 - Optional Google Cast sender support in Chrome/Chromium over HTTPS.
+- One-line lyrics display when lyrics are available through Navidrome/OpenSubsonic.
 - Built-in AlbumDeck login with an admin page for changing the app username and password.
 - Batch artwork mode that walks through albums missing CD artwork or sleeve-back artwork.
 
@@ -54,7 +55,7 @@ Before deploying, set:
 The Portainer example is pinned to:
 
 ```text
-ghcr.io/sander1384/albumdeck:v0.3.45
+ghcr.io/sander1384/albumdeck:v0.3.46
 ```
 
 After deploying, open:
@@ -106,6 +107,11 @@ Google Cast support depends on the browser and network:
 - Do not cast from `localhost`; the Chromecast device cannot load your computer's localhost.
 - Cast streams use temporary signed URLs, so the Chromecast can fetch audio without your browser login cookie while the rest of the API stays protected.
 - If your browser reaches AlbumDeck through a proxy or certificate that Chromecast cannot load, set `CAST_PUBLIC_URL` to the direct reachable AlbumDeck base URL.
+- Album playback is sent as a Cast queue, so Chromecast can continue between tracks without waiting for the tablet/browser to load each next song.
+
+## Lyrics
+
+AlbumDeck asks Navidrome for lyrics through the Subsonic/OpenSubsonic API. Synced lyrics are shown as one active line above the seek bar. Plain unsynced lyrics fall back to the first available line.
 
 ## Local Development
 
@@ -142,7 +148,7 @@ Tags:
 
 - `latest` and `main` are published from the `main` branch.
 - `vX.Y.Z` tags publish versioned images.
-- The compose examples are pinned to `v0.3.45` so new deployments do not accidentally pull an older cached image.
+- The compose examples are pinned to `v0.3.46` so new deployments do not accidentally pull an older cached image.
 
 ## Privacy Notes
 

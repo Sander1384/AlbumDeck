@@ -28,6 +28,16 @@ export type NavidromeConfig = {
   allowInsecureTls?: boolean;
 };
 
+export type LyricLine = {
+  start?: number;
+  text: string;
+};
+
+export type SongLyrics = {
+  synced: boolean;
+  lines: LyricLine[];
+};
+
 const API_VERSION = "1.16.1";
 
 function authParams(cfg: NavidromeConfig) {
@@ -106,6 +116,61 @@ export async function getAlbum(cfg: NavidromeConfig, id: string): Promise<{ albu
   }
 
   return { album: data.album };
+}
+
+function normalizeLyricLine(line: unknown): LyricLine | null {
+  if (typeof line === "string") {
+    const text = line.trim();
+    return text ? { text } : null;
+  }
+  if (!line || typeof line !== "object") return null;
+  const candidate = line as Record<string, unknown>;
+  const text = String(candidate.value ?? candidate.text ?? "").trim();
+  if (!text) return null;
+  const rawStart = candidate.start ?? candidate.startTime ?? candidate.time;
+  const start = Number(rawStart);
+  return Number.isFinite(start) ? { start: start / 1000, text } : { text };
+}
+
+function normalizeLyricsPayload(payload: unknown): SongLyrics | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as Record<string, unknown>;
+  const lyricsList = data.lyricsList as Record<string, unknown> | undefined;
+  const structuredRaw = lyricsList?.structuredLyrics;
+  const structured = Array.isArray(structuredRaw) ? structuredRaw[0] : structuredRaw;
+  if (structured && typeof structured === "object") {
+    const entry = structured as Record<string, unknown>;
+    const lines = (Array.isArray(entry.line) ? entry.line : []).map(normalizeLyricLine).filter((line): line is LyricLine => Boolean(line));
+    if (lines.length) {
+      return { synced: lines.some((line) => Number.isFinite(line.start)), lines };
+    }
+  }
+
+  const lyrics = data.lyrics as Record<string, unknown> | undefined;
+  const value = typeof lyrics?.value === "string" ? lyrics.value : typeof data.value === "string" ? data.value : "";
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((text) => ({ text }));
+  return lines.length ? { synced: false, lines } : null;
+}
+
+export async function getLyricsForSong(cfg: NavidromeConfig, song: { id: string; artist?: string; title?: string }): Promise<SongLyrics | null> {
+  try {
+    const bySongId = await callSubsonic<Record<string, unknown>>(cfg, "getLyricsBySongId", { id: song.id });
+    const normalized = normalizeLyricsPayload(bySongId);
+    if (normalized?.lines.length) return normalized;
+  } catch {
+    // Fall back to the older artist/title lookup below.
+  }
+
+  const artist = song.artist?.trim();
+  const title = song.title?.trim();
+  if (!artist || !title) return null;
+
+  try {
+    const byTitle = await callSubsonic<Record<string, unknown>>(cfg, "getLyrics", { artist, title });
+    return normalizeLyricsPayload(byTitle);
+  } catch {
+    return null;
+  }
 }
 
 export function subsonicCoverUrl(cfg: NavidromeConfig, coverId: string, size?: number): string {

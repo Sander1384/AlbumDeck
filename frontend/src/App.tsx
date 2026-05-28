@@ -6,6 +6,7 @@ import {
   fetchAlbums,
   fetchCastAssetUrl,
   fetchCastStreamUrl,
+  fetchLyrics,
   fetchCustomDiscCovers,
   deleteCustomDiscCover,
   fetchDiscogsImages,
@@ -21,6 +22,7 @@ import {
   type Album,
   type AuthStatus,
   type DiscogsResult,
+  type LyricLine,
   type Song
 } from "./api";
 import "./styles/player.css";
@@ -111,7 +113,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 50;
-const APP_VERSION = "v0.3.45";
+const APP_VERSION = "v0.3.46";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function frontCoverKey(albumId: string): string {
@@ -186,10 +188,13 @@ export default function App() {
   const castEndedSongRef = useRef<string | null>(null);
   const castClockRef = useRef<{ baseTime: number; baseMs: number; state: string } | null>(null);
   const castStoppedRef = useRef(false);
+  const castSuppressEndedRef = useRef(false);
   const castOptionsReadyRef = useRef(false);
   const castListenerAttachedRef = useRef(false);
   const isCastingRef = useRef(false);
   const currentTrackRef = useRef<Song | undefined>(undefined);
+  const tracksRef = useRef<Song[]>([]);
+  const trackIndexRef = useRef(0);
   const selectedAlbumRef = useRef<Album | null>(null);
   const currentCoverSrcRef = useRef<string | null>(null);
 
@@ -197,6 +202,7 @@ export default function App() {
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [tracks, setTracks] = useState<Song[]>([]);
   const [trackIndex, setTrackIndex] = useState(0);
+  const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -264,6 +270,16 @@ export default function App() {
   const currentTrack = tracks[trackIndex];
   const total = currentTrack?.duration ?? 0;
   const progress = useMemo(() => (total > 0 ? (elapsed / total) * 100 : 0), [elapsed, total]);
+  const currentLyric = useMemo(() => {
+    if (!lyrics.length) return "";
+    let active = lyrics[0];
+    for (const line of lyrics) {
+      if (!Number.isFinite(line.start)) return line.text;
+      if ((line.start ?? 0) <= elapsed + 0.2) active = line;
+      else break;
+    }
+    return active.text;
+  }, [elapsed, lyrics]);
 
   useEffect(() => {
     if (!isPlaying && !isCasting) return;
@@ -351,10 +367,32 @@ export default function App() {
 
   useEffect(() => {
     currentTrackRef.current = currentTrack;
+    tracksRef.current = tracks;
+    trackIndexRef.current = trackIndex;
     selectedAlbumRef.current = selectedAlbum;
     currentCoverSrcRef.current = currentCoverSrc;
     isCastingRef.current = isCasting;
-  }, [currentTrack, currentCoverSrc, isCasting, selectedAlbum]);
+  }, [currentTrack, currentCoverSrc, isCasting, selectedAlbum, trackIndex, tracks]);
+
+  useEffect(() => {
+    if (!currentTrack) {
+      setLyrics([]);
+      return;
+    }
+
+    let disposed = false;
+    fetchLyrics(currentTrack)
+      .then((data) => {
+        if (!disposed) setLyrics(data.lines ?? []);
+      })
+      .catch(() => {
+        if (!disposed) setLyrics([]);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [currentTrack?.id]);
 
   useEffect(() => {
     setIsCoverBackVisible(false);
@@ -616,7 +654,22 @@ export default function App() {
     }
 
     const idleReason = activeMedia.idleReason;
+    const currentItem = Array.isArray(activeMedia.items)
+      ? activeMedia.items.find((item: any) => item.itemId === activeMedia.currentItemId)
+      : null;
+    const itemData = currentItem?.customData ?? currentItem?.media?.customData;
+    const itemIndex = Number(itemData?.albumdeckIndex);
+    if (Number.isInteger(itemIndex) && itemIndex >= 0 && itemIndex < tracksRef.current.length && itemIndex !== trackIndexRef.current) {
+      trackIndexRef.current = itemIndex;
+      setTrackIndex(itemIndex);
+      setElapsed(0);
+      castEndedSongRef.current = null;
+    }
+
+    const isQueue = Array.isArray(activeMedia.items) && activeMedia.items.length > 1;
     const finished =
+      !castSuppressEndedRef.current &&
+      !isQueue &&
       playerState === win.chrome.cast.media.PlayerState.IDLE &&
       idleReason === win.chrome.cast.media.IdleReason.FINISHED;
     const songId = currentTrackRef.current?.id;
@@ -697,19 +750,21 @@ export default function App() {
 
     const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
     request.autoplay = true;
-    const media = await session.loadMedia(request);
-    castMediaRef.current = media;
-    castStoppedRef.current = false;
-    setIsPlaying(false);
-    setElapsed(0);
-    await waitForCastMediaEnd(media, fallbackMs);
+    castSuppressEndedRef.current = true;
+    try {
+      const media = await session.loadMedia(request);
+      castMediaRef.current = media;
+      castStoppedRef.current = false;
+      setIsPlaying(false);
+      setElapsed(0);
+      await waitForCastMediaEnd(media, fallbackMs);
+    } finally {
+      castSuppressEndedRef.current = false;
+    }
   };
 
-  const loadCastMedia = async (song: Song, startAt = 0) => {
+  const createCastMediaInfo = async (song: Song, index: number) => {
     const win = window as CastWindow;
-    const session = castSessionRef.current;
-    if (!session || !win.chrome?.cast) return false;
-
     const album = selectedAlbumRef.current;
     const mediaUrl = absoluteUrl(await fetchCastStreamUrl(song.id));
     const mediaInfo = new win.chrome.cast.media.MediaInfo(mediaUrl, "audio/mpeg");
@@ -717,6 +772,7 @@ export default function App() {
     mediaInfo.entity = mediaUrl;
     mediaInfo.streamType = win.chrome.cast.media.StreamType.BUFFERED;
     if (Number.isFinite(song.duration) && song.duration && song.duration > 0) mediaInfo.duration = song.duration;
+    mediaInfo.customData = { albumdeckSongId: song.id, albumdeckIndex: index };
 
     const metadata = new win.chrome.cast.media.MusicTrackMediaMetadata();
     metadata.title = cleanTrackTitle(song.title) || song.title || "AlbumDeck";
@@ -724,7 +780,44 @@ export default function App() {
     metadata.albumName = album?.name ?? "";
 
     mediaInfo.metadata = metadata;
+    return mediaInfo;
+  };
 
+  const loadCastMedia = async (song: Song, startAt = 0, index = trackIndexRef.current) => {
+    const win = window as CastWindow;
+    const session = castSessionRef.current;
+    if (!session || !win.chrome?.cast) return false;
+
+    const queueTracks = tracksRef.current.length ? tracksRef.current : [song];
+    const startIndex = Math.max(0, Math.min(index, queueTracks.length - 1));
+    const items = await Promise.all(queueTracks.map(async (track, itemIndex) => {
+      const mediaInfo = await createCastMediaInfo(track, itemIndex);
+      const item = new win.chrome.cast.media.QueueItem(mediaInfo);
+      item.autoplay = true;
+      item.preloadTime = 20;
+      item.customData = { albumdeckSongId: track.id, albumdeckIndex: itemIndex };
+      return item;
+    }));
+
+    if (items.length > 1 && session.queueLoad) {
+      const request = new win.chrome.cast.media.QueueLoadRequest(items);
+      request.startIndex = startIndex;
+      request.currentTime = Math.max(0, startAt);
+      const repeatAll = win.chrome.cast.media.RepeatMode?.REPEAT_ALL ?? win.chrome.cast.media.RepeatMode?.ALL;
+      if (repeatAll) {
+        request.repeatMode = repeatAll;
+      }
+      const media = await session.queueLoad(request);
+      castStoppedRef.current = false;
+      const activeMedia = media ?? session.getMediaSession?.();
+      if (activeMedia) attachCastMedia(activeMedia);
+      audioRef.current?.pause();
+      setTrackIndex(startIndex);
+      setIsPlaying(true);
+      return true;
+    }
+
+    const mediaInfo = await createCastMediaInfo(queueTracks[startIndex] ?? song, startIndex);
     const request = new win.chrome.cast.media.LoadRequest(mediaInfo);
     request.autoplay = true;
     request.currentTime = Math.max(0, startAt);
@@ -801,7 +894,7 @@ export default function App() {
       audioRef.current?.pause();
 
       const song = currentTrackRef.current;
-      if (song) await loadCastMedia(song, Math.max(0, elapsed));
+      if (song) await loadCastMedia(song, Math.max(0, elapsed), trackIndexRef.current);
     } catch (e) {
       const message = castErrorMessage(e, "");
       if (!message.includes("cancel")) {
@@ -810,7 +903,7 @@ export default function App() {
     }
   };
 
-  const playTrackImmediate = async (song: Song) => {
+  const playTrackImmediate = async (song: Song, index = trackIndexRef.current) => {
     const audio = audioRef.current;
     if (!audio) return;
     const myPlayToken = ++playTokenRef.current;
@@ -820,7 +913,7 @@ export default function App() {
     setIsFastSpin(false);
 
     if (isCastingRef.current && castSessionRef.current) {
-      await loadCastMedia(song, 0);
+      await loadCastMedia(song, 0, index);
       return;
     }
 
@@ -1075,7 +1168,7 @@ export default function App() {
     const idx = (trackIndex - 1 + tracks.length) % tracks.length;
     setTrackIndex(idx);
     setElapsed(0);
-    await playTrackImmediate(tracks[idx]);
+    await playTrackImmediate(tracks[idx], idx);
   };
 
   const next = async () => {
@@ -1084,7 +1177,7 @@ export default function App() {
     const idx = (trackIndex + 1) % tracks.length;
     setTrackIndex(idx);
     setElapsed(0);
-    await playTrackImmediate(tracks[idx]);
+    await playTrackImmediate(tracks[idx], idx);
   };
 
   const seek = (value: number) => {
@@ -1655,6 +1748,9 @@ export default function App() {
             <span className="track-label" aria-live="polite">
               {currentTrack ? `Track ${(trackIndex + 1).toString().padStart(2, "0")}` : "Track --"}
             </span>
+          </div>
+          <div className="lyric-line" aria-live="polite">
+            {currentLyric}
           </div>
           <div className="seek-row">
             <span>{fmt(elapsed)}</span>

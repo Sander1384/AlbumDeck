@@ -6,7 +6,7 @@ import express from "express";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
-import { getAlbum, getAlbums, getAllAlbums, subsonicCoverUrl, subsonicStreamUrl, type NavidromeConfig } from "./navidrome.js";
+import { getAlbum, getAlbums, getAllAlbums, getLyricsForSong, subsonicCoverUrl, subsonicStreamUrl, type NavidromeConfig } from "./navidrome.js";
 
 const app = express();
 const PORT = Number(process.env.APP_PORT ?? 8080);
@@ -480,6 +480,17 @@ app.get("/api/stream/:songId", async (req, res) => {
     await pipeNavidromeStream(req, res, streamUrl);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Stream failed" });
+  }
+});
+
+app.get("/api/lyrics/:songId", async (req, res) => {
+  try {
+    const artist = typeof req.query.artist === "string" ? req.query.artist : undefined;
+    const title = typeof req.query.title === "string" ? req.query.title : undefined;
+    const lyrics = await getLyricsForSong(navidromeConfig, { id: req.params.songId, artist, title });
+    res.json(lyrics ?? { synced: false, lines: [] });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "Lyrics fetch failed" });
   }
 });
 

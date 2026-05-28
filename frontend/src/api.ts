@@ -13,6 +13,16 @@ export type Song = {
   duration?: number;
 };
 
+export type LyricLine = {
+  start?: number;
+  text: string;
+};
+
+export type SongLyrics = {
+  synced: boolean;
+  lines: LyricLine[];
+};
+
 export type DiscogsResult = {
   title: string;
   artist?: string;
@@ -96,6 +106,14 @@ export function coverUrl(coverId?: string): string {
 
 export function streamUrl(songId: string): string {
   return `${API_BASE}/stream/${encodeURIComponent(songId)}`;
+}
+
+export async function fetchLyrics(song: Song): Promise<SongLyrics> {
+  const params = new URLSearchParams();
+  if (song.artist) params.set("artist", song.artist);
+  if (song.title) params.set("title", song.title);
+  const query = params.toString();
+  return apiGet<SongLyrics>(`/lyrics/${encodeURIComponent(song.id)}${query ? `?${query}` : ""}`);
 }
 
 export async function fetchCastStreamUrl(songId: string): Promise<string> {
