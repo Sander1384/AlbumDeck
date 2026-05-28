@@ -744,7 +744,7 @@ body {
 .lyric-line {
   min-height: 22px;
   margin: 0 52px 8px;
-  color: #f2f5ff;
+  color: #d9e3ff;
   font-size: clamp(0.82rem, 1.2vw, 1rem);
   font-weight: 650;
   line-height: 1.2;

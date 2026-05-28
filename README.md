@@ -55,7 +55,7 @@ Before deploying, set:
 The Portainer example is pinned to:
 
 ```text
-ghcr.io/sander1384/albumdeck:v0.3.47
+ghcr.io/sander1384/albumdeck:v0.3.48
 ```
 
 After deploying, open:
@@ -111,7 +111,7 @@ Google Cast support depends on the browser and network:
 
 ## Lyrics
 
-AlbumDeck asks Navidrome for lyrics through the Subsonic/OpenSubsonic API. Synced lyrics are shown as one active line above the seek bar. Plain unsynced lyrics fall back to the first available line.
+AlbumDeck asks Navidrome for lyrics through the Subsonic/OpenSubsonic API. If Navidrome has no lyrics for a track, AlbumDeck falls back to LRCLIB using the track artist, title, album, and duration. Synced lyrics are shown as one active line above the seek bar. Plain unsynced lyrics fall back to the first available line.
 
 ## Local Development
 
@@ -148,13 +148,13 @@ Tags:
 
 - `latest` and `main` are published from the `main` branch.
 - `vX.Y.Z` tags publish versioned images.
-- The compose examples are pinned to `v0.3.47` so new deployments do not accidentally pull an older cached image.
+- The compose examples are pinned to `v0.3.48` so new deployments do not accidentally pull an older cached image.
 
 ## Privacy Notes
 
 AlbumDeck does not require secrets in the frontend build. Keep credentials in `.env`, Portainer environment variables, or your Docker secret management. Do not commit `.env` or `.data`.
 
-The backend hashes Navidrome credentials for Subsonic API calls and proxies streams/covers server-side. Custom artwork mappings may contain external image URLs or data URLs, so treat `/app/.data` as personal library metadata.
+The backend hashes Navidrome credentials for Subsonic API calls and proxies streams/covers server-side. Lyrics fallback may send track metadata to LRCLIB when Navidrome has no lyrics. Custom artwork mappings may contain external image URLs or data URLs, so treat `/app/.data` as personal library metadata.
 
 ## Troubleshooting
 

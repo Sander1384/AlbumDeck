@@ -35,6 +35,7 @@ export type LyricLine = {
 
 export type SongLyrics = {
   synced: boolean;
+  source?: string;
   lines: LyricLine[];
 };
 
@@ -142,17 +143,73 @@ function normalizeLyricsPayload(payload: unknown): SongLyrics | null {
     const entry = structured as Record<string, unknown>;
     const lines = (Array.isArray(entry.line) ? entry.line : []).map(normalizeLyricLine).filter((line): line is LyricLine => Boolean(line));
     if (lines.length) {
-      return { synced: lines.some((line) => Number.isFinite(line.start)), lines };
+      return { synced: lines.some((line) => Number.isFinite(line.start)), source: "navidrome", lines };
     }
   }
 
   const lyrics = data.lyrics as Record<string, unknown> | undefined;
   const value = typeof lyrics?.value === "string" ? lyrics.value : typeof data.value === "string" ? data.value : "";
   const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((text) => ({ text }));
-  return lines.length ? { synced: false, lines } : null;
+  return lines.length ? { synced: false, source: "navidrome", lines } : null;
 }
 
-export async function getLyricsForSong(cfg: NavidromeConfig, song: { id: string; artist?: string; title?: string }): Promise<SongLyrics | null> {
+function parseLrc(raw: string): LyricLine[] {
+  const lines: LyricLine[] = [];
+  const timeRe = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+
+  raw.split(/\r?\n/).forEach((row) => {
+    const text = row.replace(timeRe, "").trim();
+    if (!text) return;
+    let match: RegExpExecArray | null;
+    timeRe.lastIndex = 0;
+    while ((match = timeRe.exec(row)) !== null) {
+      const minutes = Number(match[1]);
+      const seconds = Number(match[2]);
+      const fraction = Number((match[3] ?? "0").padEnd(3, "0"));
+      if (Number.isFinite(minutes) && Number.isFinite(seconds) && Number.isFinite(fraction)) {
+        lines.push({ start: minutes * 60 + seconds + fraction / 1000, text });
+      }
+    }
+  });
+
+  return lines.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+}
+
+async function getLrclibLyrics(song: { artist?: string; title?: string; album?: string; duration?: number }): Promise<SongLyrics | null> {
+  const artist = song.artist?.trim();
+  const title = song.title?.trim();
+  if (!artist || !title) return null;
+
+  const params = new URLSearchParams({
+    artist_name: artist,
+    track_name: title,
+    ...(song.album?.trim() ? { album_name: song.album.trim() } : {}),
+    ...(Number.isFinite(song.duration) && song.duration ? { duration: String(Math.round(song.duration)) } : {})
+  });
+
+  try {
+    const response = await axios.get<{ syncedLyrics?: string | null; plainLyrics?: string | null }>(
+      `https://lrclib.net/api/get?${params.toString()}`,
+      {
+        timeout: 10000,
+        headers: {
+          accept: "application/json",
+          "user-agent": "AlbumDeck/0.3.0 +https://github.com/Sander1384/AlbumDeck"
+        }
+      }
+    );
+    const synced = typeof response.data.syncedLyrics === "string" ? parseLrc(response.data.syncedLyrics) : [];
+    if (synced.length) return { synced: true, source: "lrclib", lines: synced };
+
+    const plain = typeof response.data.plainLyrics === "string" ? response.data.plainLyrics : "";
+    const lines = plain.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((text) => ({ text }));
+    return lines.length ? { synced: false, source: "lrclib", lines } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getLyricsForSong(cfg: NavidromeConfig, song: { id: string; artist?: string; title?: string; album?: string; duration?: number }): Promise<SongLyrics | null> {
   try {
     const bySongId = await callSubsonic<Record<string, unknown>>(cfg, "getLyricsBySongId", { id: song.id });
     const normalized = normalizeLyricsPayload(bySongId);
@@ -167,10 +224,13 @@ export async function getLyricsForSong(cfg: NavidromeConfig, song: { id: string;
 
   try {
     const byTitle = await callSubsonic<Record<string, unknown>>(cfg, "getLyrics", { artist, title });
-    return normalizeLyricsPayload(byTitle);
+    const normalized = normalizeLyricsPayload(byTitle);
+    if (normalized?.lines.length) return normalized;
   } catch {
-    return null;
+    // Fall back to LRCLIB below.
   }
+
+  return getLrclibLyrics(song);
 }
 
 export function subsonicCoverUrl(cfg: NavidromeConfig, coverId: string, size?: number): string {

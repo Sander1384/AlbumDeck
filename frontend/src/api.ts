@@ -10,6 +10,7 @@ export type Song = {
   id: string;
   title: string;
   artist?: string;
+  album?: string;
   duration?: number;
 };
 
@@ -20,6 +21,7 @@ export type LyricLine = {
 
 export type SongLyrics = {
   synced: boolean;
+  source?: string;
   lines: LyricLine[];
 };
 
@@ -122,6 +124,8 @@ export async function fetchLyrics(song: Song): Promise<SongLyrics> {
   const params = new URLSearchParams();
   if (song.artist) params.set("artist", song.artist);
   if (song.title) params.set("title", song.title);
+  if (song.album) params.set("album", song.album);
+  if (Number.isFinite(song.duration)) params.set("duration", String(song.duration));
   const query = params.toString();
   return apiGet<SongLyrics>(`/lyrics/${encodeURIComponent(song.id)}${query ? `?${query}` : ""}`);
 }

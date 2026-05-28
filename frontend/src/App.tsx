@@ -114,7 +114,7 @@ const BACK_COVER_REMOTE_PREFIX = "__backcover__:";
 const LOAD_SOUNDS_STORAGE_KEY = "cd-player-load-sounds-enabled-v1";
 const DISC_SPEED_STORAGE_KEY = "albumdeck-disc-speed-v1";
 const DISC_SPEED_DEFAULT = 50;
-const APP_VERSION = "v0.3.47";
+const APP_VERSION = "v0.3.48";
 const EMPTY_COVER_DRAFT: CustomDiscCover = { source: "", zoom: 1, x: 0, y: 0, rotate: 0 };
 
 function frontCoverKey(albumId: string): string {
@@ -204,6 +204,7 @@ export default function App() {
   const [tracks, setTracks] = useState<Song[]>([]);
   const [trackIndex, setTrackIndex] = useState(0);
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
+  const [lyricsChecked, setLyricsChecked] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -272,7 +273,8 @@ export default function App() {
   const total = currentTrack?.duration ?? 0;
   const progress = useMemo(() => (total > 0 ? (elapsed / total) * 100 : 0), [elapsed, total]);
   const currentLyric = useMemo(() => {
-    if (!lyrics.length) return "";
+    if (!currentTrack) return "";
+    if (!lyrics.length) return lyricsChecked ? "No lyrics found for this track" : "";
     let active = lyrics[0];
     for (const line of lyrics) {
       if (!Number.isFinite(line.start)) return line.text;
@@ -280,7 +282,7 @@ export default function App() {
       else break;
     }
     return active.text;
-  }, [elapsed, lyrics]);
+  }, [currentTrack, elapsed, lyrics, lyricsChecked]);
 
   useEffect(() => {
     if (!isPlaying && !isCasting) return;
@@ -392,16 +394,25 @@ export default function App() {
   useEffect(() => {
     if (!currentTrack) {
       setLyrics([]);
+      setLyricsChecked(false);
       return;
     }
 
     let disposed = false;
+    setLyrics([]);
+    setLyricsChecked(false);
     fetchLyrics(currentTrack)
       .then((data) => {
-        if (!disposed) setLyrics(data.lines ?? []);
+        if (!disposed) {
+          setLyrics(data.lines ?? []);
+          setLyricsChecked(true);
+        }
       })
       .catch(() => {
-        if (!disposed) setLyrics([]);
+        if (!disposed) {
+          setLyrics([]);
+          setLyricsChecked(true);
+        }
       });
 
     return () => {

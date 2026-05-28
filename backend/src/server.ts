@@ -514,7 +514,15 @@ app.get("/api/lyrics/:songId", async (req, res) => {
   try {
     const artist = typeof req.query.artist === "string" ? req.query.artist : undefined;
     const title = typeof req.query.title === "string" ? req.query.title : undefined;
-    const lyrics = await getLyricsForSong(navidromeConfig, { id: req.params.songId, artist, title });
+    const album = typeof req.query.album === "string" ? req.query.album : undefined;
+    const duration = Number(req.query.duration);
+    const lyrics = await getLyricsForSong(navidromeConfig, {
+      id: req.params.songId,
+      artist,
+      title,
+      album,
+      duration: Number.isFinite(duration) ? duration : undefined
+    });
     res.json(lyrics ?? { synced: false, lines: [] });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Lyrics fetch failed" });
